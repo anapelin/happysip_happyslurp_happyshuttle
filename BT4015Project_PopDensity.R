@@ -8,8 +8,8 @@ word_document: default
 pdf_document: default
 ---
   
-
-#load all the following libraries else install.packages accordingly
+# 1. Setting up 
+# Loading all the following libraries else install.packages accordingly
   # install.packages(c("raster", "sp"))
   # install.packages("psych")
 library('GISTools')
@@ -29,12 +29,62 @@ library(spatstat)
 library(spdep)
 library(jsonlite)
 
+# 2. Handling Data
+# 2.1 Loading Raw Datafiles
+# Base Map
+base_map <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
 
-#Read data from file
+# Population + HDB Data
 data <- read.csv("dataset/filteredSG_population_density.csv")
-poi <- read.csv('dataset/poi.csv')
 hdb <- read.csv("dataset/hdb.csv") %>% mutate(addr = paste(blk_no,street)) %>% select(addr,lat,lng)
 yth_data <- read.csv("dataset/filteredSG_population_density.csv") %>% select(longitude, latitude, youth)
+
+
+# Nightlife (Bars + Clubs) Crowd Density Data
+rawdata_bars <- fromJSON("dataset/besttime/bars.json", flatten=TRUE)
+rawdata_clubs <- fromJSON("dataset/besttime/clubs.json", flatten=TRUE)
+relevant_columns <- c("venue_lat", "venue_lon", "venue_name")
+bars <- rawdata_bars$venues[relevant_columns]
+clubs <- rawdata_clubs$venues[relevant_columns]
+
+
+# Restaurant Data
+
+# 2.2 Setting up DataFrame
+# Population DataFrame:
+
+# HDB DataFrame: 
+
+# Nightlife DataFrame: lat, lng, name of place, crowd density
+nightlife <- rbind(bars, clubs)
+new_column_names <- c("lat", "lng", "name")
+nightlife <- setNames(nightlife, new_column_names)
+
+
+# 3. Preprocessing Data to Vectors/Rasters
+# 3.1 Nightlife Locations
+# Create a spatial data frame with points
+coordinates <- cbind(nightlife$lng, nightlife$lat) 
+
+# Convert the dataframe to a SpatialPointsDataFrame
+nightlife_sp_data <- SpatialPointsDataFrame(coordinates, data = data.frame(nightlife), proj4string = CRS("+proj=longlat +datum=WGS84"))
+# convert to sf 
+nightlife_sf_data <- st_as_sf(nightlife_sp_data) 
+nightlife_buffer <- st_buffer(nightlife_sf_data, dist = 2500)
+
+
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(nightlife_sf_data) + tm_bubbles(size = 0.1, col = "red") +
+  tm_shape(nightlife_buffer) + tm_polygons() +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Nightlife location in Singapore",
+            title.position = c('left', 'bottom'))
 
 
 coordinates(data) <- ~longitude+latitude
