@@ -1,0 +1,69 @@
+,name,address,lat,lon,fri_opening_hrs,sat_opening_hrs,distance_from_central(km)
+181,Akbar 24 Hours Restaurant,Akbar 24 Hours Restaurant - Lim Teck Kim Road [Islandwide Delivery],1.273545344145944,103.8427564,['00:00-23:59'],['00:00-23:59'],1.8834711019871955
+196,Curry Village Restaurant,Curry Village Restaurant - Lim Teck Kim Road,1.2735417,103.8425812025,['00:00-23:59'],['00:00-23:59'],1.8942827049301678
+255,Good Eat’s Family Restaurant,Good Eat's Family Restaurant - Tanjong Pagar Plaza,1.2753738158652193,103.84328864948856,"['00:00-01:59', '08:00-23:59']","['00:00-01:59', '08:00-23:59']",1.6818495041538526
+393,2D1N Soju Bang,2D1N Soju Bang Korean Food - Tanjong Pagar Road [Islandwide Delivery],1.2793477,103.8438159422674,"['00:00-03:00', '11:00-23:59']","['00:00-03:00', '11:00-23:59']",1.3006865989624736
+541,Don Dae Bak,Don Dae Bak - Kreta Ayer Road [Islandwide Delivery],1.280780277081675,103.84226760271622,"['00:00-03:00', '17:00-23:59']","['00:00-04:00', '17:00-23:59']",1.323150837364162
+791,Oyster Co,Oyster Co - Central Mall [Islandwide Delivery],1.288237325142506,103.8421433,"['00:00-01:30', '11:30-23:59']","['00:00-01:30', '11:30-23:59']",1.0733889551572942
+795,Jing Wu Ya Bo (精武鸭脖),Jia Xiang Xiao Chu 16 家乡小厨16店 - New Bridge [Islandwide Delivery],1.2845643,103.8438686,"['00:00-03:30', '11:00-23:59']","['00:00-03:30', '11:00-23:59']",0.957298222653226
+834,Pratunam by Soi Thai Soi Nice,Pratunam by Soi Thai Soi Nice - The Centrepoint [Islandwide Delivery],1.30164880854183,103.840131091869,"['00:00-00:30', '11:00-23:59']","['00:00-02:30', '11:00-23:59']",1.993817144739808
+861,Sushi Co,Sushi Co - Central Mall [Islandwide Delivery],1.2882516893386768,103.8421511,"['00:00-01:30', '11:30-23:59']","['00:00-01:30', '11:30-23:59']",1.0725689848005673
+1078,Lucky Cafe,Lucky Cafe - North Canal Road [Islandwide Delivery],1.2863515,103.8484951,"['00:00-04:00', '08:00-23:59']","['00:00-04:00', '18:00-23:59']",0.406614077539158
+1862,The Square,The Square - Furama - Furama Riverfront,1.2878583,103.83613553417722,['00:00-23:59'],['00:00-23:59'],1.741573606957078
+1874,Mount Faber Nasi Lemak,Mount Faber Nasi Lemak - Since 1975 - Kreta Ayer Road,1.2811151,103.842153,"['00:00-02:00', '10:40-23:59']","['00:00-02:00', '10:40-23:59']",1.311697355364023
+1903,The Coffee Bean & Tea Leaf,The Coffee Bean & Tea Leaf - International Plaza,1.2757747714285714,103.8462829,['00:00-23:59'],['00:00-23:59'],1.479246085990793
+2021,Pizza Hut,Pizza Hut - Kreta Ayer Road,1.280635572728812,103.8423269482148,"['00:00-01:30', '10:00-23:59']","['00:00-02:00', '10:00-23:59']",1.3275612489560775
+2043,Chong Qing Grilled Fish,Chong Qing Grilled Fish - Mosque Street,1.284014725,103.8444698,"['00:00-00:30', '11:00-23:59']","['00:00-00:30', '11:00-23:59']",0.9231732582878662
+2129,Kintamani Indonesian Restaurant,Kintamani Indonesian Restaurant - Furama Riverfront,1.2875419797927492,103.8360578672182,['00:00-23:59'],['00:00-23:59'],1.7507759103318592
+2146,Four Points Eatery,"Four Points Eatery - Four Points by Sheraton Singapore, Riverview",1.289237,103.836567672774,"['00:00-01:30', '03:00-23:59']","['00:00-01:30', '03:00-23:59']",1.6993895675083217
+2180,Bistro Milan,Bistro Milan - Purvis Street,1.29626069786319,103.855415541734,"['00:00-02:00', '10:30-23:59']","['00:00-02:00', '10:30-23:59']",1.0035994053409938
+2416,Tiong Shian Porridge Centre,Tiong Shian Porridge Centre - New Bridge Road,1.2826508105591188,103.84235650538984,"['00:00-03:30', '08:30-23:59']","['00:00-03:30', '08:30-23:59']",1.2018978727438614
+2419,Huo La La Spicy Pot,Huo La La Spicy Pot - Mosque Street,1.284014725,103.8444698,"['00:00-00:30', '11:00-23:59']","['00:00-00:30', '11:00-23:59']",0.9231732582878662
+2990,Hanjip Korean Grill House,Hanjip Korean Grill House - The Cannery [Islandwide Delivery],1.2900986950442077,103.8459010447006,"['00:00-00:30', '12:00-23:59']","['00:00-00:30', '12:00-23:59']",0.6963866867744851
+3148,HANS IM GLÜCK German Burgergrill,HANS IM GLÜCK German Burgergrill - Boat Quay,1.28798635,103.8493528,"['00:00-03:00', '05:00-23:59']","['00:00-03:00', '05:00-23:59']",0.2705971554202953
+3191,Hong Hu Ramen,Hong Hu Ramen - Killiney Road,1.2979334945560257,103.83854385,['00:00-23:59'],['00:00-23:59'],1.8409665806878353
+3204,La Jia Restaurant,La Jia Restaurant - Wilkie Edge ,1.3022607737660177,103.84993228084778,"['00:00-02:30', '11:15-23:59']","['00:00-02:30', '11:15-23:59']",1.5954452777008385
+3209,The Ramen House,The Ramen House - Short Street [Islandwide Delivery],1.3021796,103.8503724050784,"['00:00-01:25', '11:00-23:59']","['00:00-01:25', '11:00-23:59']",1.5809289102590292
+3276,Coffee Smith,Coffee Smith - Orchard Gateway,1.3003424420774934,103.83946084477792,['00:00-23:59'],['00:00-23:59'],1.938477235782501
+3281,Hao Lai Wu Steamboat & Bbq,Hao Lai Wu Steamboat & Bbq - Burlington Square,1.3026734950002234,103.8521381,"['00:00-02:30', '11:30-23:59']","['00:00-03:00', '11:00-23:59']",1.6281934082124476
+3323,Gao Feng Bak Chor Mee & Chicken Rice,Gao Feng Bak Chor Mee & Chicken Rice - Upper Circular Road,1.288246519,103.84856,['00:00-23:59'],['00:00-23:59'],0.36026886682330483
+3358,Aroy,Aroy-Dee Thai Kitchen - Bencoolen Street,1.300699,103.85182056455773,"['00:00-02:00', '11:00-23:59']","['00:00-02:00', '11:00-23:59']",1.4093928153663144
+3363,PARTEA X C-Mart,PARTEA X C-Mart - High Street Plaza ,1.29017,103.8494666,"['00:00-02:00', '10:30-23:59']","['00:00-04:00', '10:30-23:59']",0.3558254811052331
+3388,Mosanco Enchanted Cafe The Rainforest,Mosanco Enchanted Cafe The Rainforest- North Canal Road,1.286980616,103.8469329,['00:00-23:59'],['00:00-23:59'],0.5504891564562842
+3398,WOW Bistro,WOW Bistro - Hotel Bencoolen,1.299023,103.850298,"['00:00-02:00', '07:00-23:59']","['00:00-02:00', '07:00-23:59']",1.2351848535290324
+3433,Tangmen,Tangmen - Orchard Plaza,1.3015322,103.8410819,"['00:00-03:00', '16:30-23:59']","['00:00-03:00', '16:30-23:59']",1.9165480858769137
+3461,Al-Jilani Restaurant Pte Ltd,Al-Jilani Restaurant Pte Ltd - Bencoolen Street,1.3007503,103.8518744,['00:00-23:59'],['00:00-23:59'],1.4150951946557335
+3472,Rochor Original Beancurd,Rochor Original Beancurd  - Short Street,1.3020510016788962,103.85028163225772,"['00:00-00:30', '10:00-23:59']","['00:00-00:30', '10:30-23:59']",1.5678253396159951
+3504,JueWei,JueWei 绝味 - Peace Centre (King of Braise),1.301284,103.84987345,"['00:00-01:00', '11:00-23:59']","['00:00-01:00', '11:00-23:59']",1.4893294944814535
+3525,Atas Turkish Kebab,Atas Turkish Kebab - Fortune Centre [Islandwide Delivery],1.3002680681948249,103.85205095660392,"['00:00-01:59', '10:30-23:59']","['00:00-01:59', '10:30-23:59']",1.362060784521428
+3532,Lao Si Chuan Restaurant,Lao Si Chuan Restaurant - Selegie House,1.3033626,103.8503026,"['00:00-02:30', '11:00-23:59']","['00:00-02:30', '11:00-23:59']",1.7118715945186922
+3548,Rui Xiang Restaurant,Rui Xiang Restaurant - Bencoolen Street,1.3008934122608158,103.85181868811256,['00:00-23:59'],['00:00-23:59'],1.4308892546433722
+3590,Fat Bird,Fat Bird - Liang Seah Place [Islandwide Delivery],1.2982637,103.85623196937584,"['00:00-00:30', '11:00-23:59']","['00:00-00:30', '11:00-23:59']",1.2429329807187395
+3636,Tiffany Cafe & Restaurant,Tiffany Cafe & Restaurant - Furama Singapore Hotel,1.28643915,103.844184,['00:00-23:59'],['00:00-23:59'],0.8622212450583968
+3667,Al Ahamed Classic,Al Ahamed Classic - Killiney Road,1.29892,103.83943,['00:00-23:59'],['00:00-23:59'],1.8332783415308112
+3678,Tha Siam Thai Kitchen,Tha Siam Thai Kitchen - Orchard Plaza,1.3013269964627203,103.8411219,"['00:00-03:00', '10:30-23:59']","['00:00-03:00', '13:30-23:59']",1.8960345820360263
+3697,Makan Matters,Makan Matters - Sultan Plaza,1.302965,103.8617162,['00:00-23:59'],['00:00-23:59'],1.9943089338460447
+3718,JueWei,JueWei 绝味 - City Gate,1.302273,103.8620147,"['00:00-01:00', '11:00-23:59']","['00:00-01:00', '11:00-23:59']",1.950291569094979
+3724,Xiao Jun Gan Chuan Chuan Xiang,Xiao Jun Gan Chuan Chuan Xiang - The 101,1.2975443,103.8569308,['00:00-23:59'],['00:00-23:59'],1.2053519581252579
+3773,Pizza Hut,Pizza Hut - Beach Road,1.3013914,103.861862,"['00:00-01:30', '10:00-23:59']","['00:00-01:30', '10:00-23:59']",1.861723920468254
+3803,DON N BAP,DON N BAP - Sultan Plaza,1.3030822,103.8615418,['00:00-23:59'],['00:00-23:59'],1.9944743652729668
+3818,M.A. Deen Biasa,M.A. Deen Biasa - Jalan Sultan,1.3032116,103.8612317,['00:00-23:59'],['00:00-23:59'],1.9880244234545519
+3832,New Shah Alam Restaurant,New Shah Alam Restaurant - Circular Road,1.287304,103.8488942,['00:00-23:59'],['00:00-23:59'],0.3295196081047658
+3844,Royal Curry House,Royal Curry House - Killiney Road,1.2989940999999998,103.8393479,['00:00-23:59'],['00:00-23:59'],1.8455506519433442
+3892,Yong Kee Seafood Restaurant,Yong Kee Seafood Restaurant - Jalan Besar,1.3047976,103.854743,"['00:00-02:45', '16:30-23:59']","['00:00-02:45', '16:30-23:59']",1.8914764986793833
+3899,Al-Madinah Restaurant,Al-Madinah Restaurant - Orchard Plaza,1.3017348000000002,103.8410175035059,['00:00-23:59'],['00:00-23:59'],1.9385708769922019
+3909,Taan,Taan - Liang Seah Street,1.29825945,103.85620877627454,"['00:00-00:30', '12:00-23:59']","['00:00-00:30', '12:00-23:59']",1.2414758256482015
+3973,Hock Prawn Mee,Hock Prawn Mee - Jalan Besar,1.3047480663365718,103.85478147162974,['00:00-23:59'],['00:00-23:59'],1.8868354828043712
+3983,Rui Xiang Restaurant,Rui Xiang Restaurant - Bencoolen Street ,1.3008934122608158,103.85181868811256,['00:00-23:59'],['00:00-23:59'],1.4308892546433722
+4089,Nur Fayidha Restaurant,Nur Fayidha Restaurant - Pahang Street,1.3017801,103.86062826,['00:00-23:59'],['00:00-23:59'],1.8183645269668731
+4166,Chong Qing Grilled Fish,Chong Qing Grilled Fish - Liang Seah Street,1.2979006,103.8565518,"['00:00-00:30', '11:00-23:59']","['00:00-00:30', '11:00-23:59']",1.2212499958824417
+6149,Wupinlang Dongbei Restaurant,Wupinlang Dongbei Restaurant - Jalan Sultan,1.3030107,103.8613825,['00:00-23:59'],['00:00-23:59'],1.9782182005713411
+10556,The Coffee Bean & Tea Leaf,The Coffee Bean & Tea Leaf - Raffles City Shopping Centre [Islandwide Delivery],1.293359697534342,103.85286472147824,['00:00-23:59'],['00:00-23:59'],0.6098232402910362
+10694,Xiao Long Kan Hotpot,Xiao Long Kan Hotpot - Smith Street,1.2821407,103.84443615,['00:00-23:59'],['00:00-23:59'],1.0400857013636695
+10746,North South Cuisine,North South Cuisine - Beach Road,1.3013336,103.8618501,"['00:00-02:00', '11:00-15:00', '17:00-23:59']","['00:00-02:00', '17:00-23:59']",1.8558269622847958
+10798,Teh Tarik Time,Teh Tarik Time - River Valley Road,1.29376035,103.8424302,['00:00-23:59'],['00:00-23:59'],1.223122583568234
+11111,Al-Bismi Kitchen,Al-Bismi Kitchen - Dickson Road,1.3053366666666666,103.853851425,['00:00-23:59'],['00:00-23:59'],1.9359178736073377
+11455,La Jia Restaurant,La Jia Restaurant - Wilkie Edge,1.3018386414895249,103.84977425463472,"['00:00-02:30', '11:30-23:59']","['00:00-02:30', '11:30-23:59']",1.5516082577139043
+11472,Wanyoo Cyber Cafe,Wanyoo Cyber Cafe - North Bridge Road,1.29852262,103.8560032375,['00:00-23:59'],['00:00-23:59'],1.2595356849874304
+11642,Kampong Glam Cafe,Kampong Glam Cafe - Bussorah Street,1.3012401,103.8599961,"['00:00-02:00', '08:00-23:59']","['00:00-02:00', '08:00-23:59']",1.730283686193411
+11740,Warung OMG,Warung OMG - Marina Square,1.2913305,103.8585845,"['00:00-03:00', '17:00-23:59']","['00:00-03:00', '19:00-23:59']",0.8439671643399543
