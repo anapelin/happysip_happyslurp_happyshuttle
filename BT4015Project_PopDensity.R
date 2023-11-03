@@ -245,3 +245,26 @@ kde <- density(ppp_data)
 plot(kde)
 
 
+#Lets try here
+#plot out all the points for youth density
+
+yth_spatial <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
+yth_spatial <- yth_spatial[-14]
+
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(yth_spatial) + tm_bubbles(size = "youth", scale = 0.5)  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Nightlife location in Singapore",
+            title.position = c('left', 'bottom'))
+
+
+
+
+
+
