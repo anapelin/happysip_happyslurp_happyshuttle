@@ -39,6 +39,19 @@ data <- read.csv("dataset/filteredSG_population_density.csv")
 hdb <- read.csv("dataset/hdb.csv") %>% mutate(addr = paste(blk_no,street)) %>% select(addr,lat,lng)
 yth_data <- read.csv("dataset/filteredSG_population_density.csv") %>% select(longitude, latitude, youth)
 
+# Read & Load Bus Stop Data
+bus_data <- data.frame()
+for(i in 0:10) {
+  file_name <- paste0("dataset/busstops/response(", i, ").json")
+  # Handle the case for response.json (without the index)
+  if(i == 0) {
+    file_name <- "dataset/busstops/response.json"
+  }
+  json_read <- fromJSON(file_name, flatten = TRUE)
+  bus_data <- rbind(bus_data, json_read$value)
+}
+bus_spatial <- st_as_sf(bus_data, coords = c("Longitude", "Latitude"), crs = 4326)
+
 
 # Nightlife (Bars + Clubs) Crowd Density Data
 rawdata_bars <- fromJSON("dataset/besttime/bars.json", flatten=TRUE)
@@ -190,18 +203,7 @@ ggplot() +
   labs(title = "Overlay of Polygon and Point Plot") +  theme_void()
 
 
-# Read & Load Bus Stop Data
-bus_data <- data.frame()
-for(i in 0:10) {
-  file_name <- paste0("busstops/response(", i, ").json")
-  # Handle the case for response.json (without the index)
-  if(i == 0) {
-    file_name <- "busstops/response.json"
-  }
-  json_read <- fromJSON(file_name, flatten = TRUE)
-  bus_data <- rbind(bus_data, json_read$value)
-}
-bus_spatial <- st_as_sf(bus_data, coords = c("Longitude", "Latitude"), crs = 4326)
+
   
 #Plot overlay of polygon and point plot for bus stops with HDB points
 ggplot() +
@@ -246,25 +248,133 @@ plot(kde)
 
 
 #Lets try here
-#plot out all the points for youth density
 
-yth_spatial <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
-yth_spatial <- yth_spatial[-14]
-
+#HDB with youth polygons
 tm_shape(base_map) + tm_borders() + 
   tm_basemap('OpenStreetMap') + 
-  tm_shape(yth_spatial) + tm_bubbles(size = "youth", scale = 0.5)  +
+  tm_shape(yth_poly) + tm_polygons(col = 'youth') + 
+  tm_shape(hdb_spatial) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) +
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
             legend.text.size = 0.25, 
             legend.title.size = 0.5,
-            title="Nightlife location in Singapore",
+            title="HDB location in Singapore",
             title.position = c('left', 'bottom'))
 
+#KDE plot
+
+hdb_points <- as(joined, "Spatial")
+hdb_centers <- kde.points(hdb_points, h = 0.01) 
+hdb_centers_sf <- st_as_sf(hdb_centers)
+
+plot(hdb_centers) 
+tm_shape(hdb_centers) + tm_raster()
+
+#Reclassify values in raster to make contour lines as seen in KDE plot.
+reclass_values <- c(0,50,1, #reclassify kde values from 0-50 in group 1 and so on
+                    50,100,2,
+                    100,150,3,
+                    150,200,4,
+                    200,250,5,
+                    250,300,6)
+
+reclass_hdb_centers <- reclassify(as(hdb_centers, "RasterLayer"), reclass_values) #reclassify kde values to groups
+hdb_centers_poly <- rasterToPolygons(reclass_hdb_centers, dissolve = T) #to make a polygon layer
+hdb_centers_poly <- st_as_sf(hdb_centers_poly) #to make an SF object
+hdb_centers_poly <- hdb_centers_poly[-c(1,2),] #remove polys with low kde values 
+hdb_centers_poly <- st_cast(hdb_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
+
+#map to show how the kde looks like with all hdbs
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
+  tm_shape(joined) + tm_bubbles(size = 0.05, scale = 0.5, col = 'youth')  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="HDB location in Singapore",
+            title.position = c('left', 'top'))
+
+#Map to show how bustops fare with kdes
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
+  tm_shape(bus_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Busstop location in Singapore \n with KDE of HDBs",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+#remove busstops which are not inside the polygons
+bus_inside_spatial <- st_intersection(bus_spatial, hdb_centers_poly)
+
+#Show busstops which are inside the KDEs
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
+  tm_shape(bus_inside_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Busstop location in Singapore \n with KDE of HDBs",
+            title.size = 1,
+            title.position = c('left', 'top'))
 
 
+#get the centroids of each polygon
+hdb_centers_points <- st_centroid(hdb_centers_poly)
+#find closest busstop to each centroid
+closest_busstops_index <- st_nearest_feature(hdb_centers_points, bus_inside_spatial)
+closest_busstops <- bus_inside_spatial[closest_busstops_index,]
 
+#busstops 
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
+  tm_shape(closest_busstops) + tm_bubbles(size = 0.2, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Central busstop location in Singapore \n with KDE of HDBs",
+            title.size = 1,
+            title.position = c('left', 'top'))
 
+#create buffers for each centroid
+closest_busstops_buffer <- st_buffer(closest_busstops, dist = 1500) #1km buffer
+closest_busstops_buffer <- st_union(closest_busstops_buffer) #join the buffers together
+closest_busstops_buffer <- st_cast(closest_busstops_buffer,'POLYGON') #join the buffers together
+closest_busstops_buffer <- st_make_valid(closest_busstops_buffer)
+
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(closest_busstops_buffer) + tm_polygons() + 
+  tm_shape(hdb_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Central busstop buffers in\n Singapore  with  HDBs",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+num_hdb_captured <- nrow(st_intersection(hdb_spatial, closest_busstops_buffer))
+percentage_captured <- num_hdb_captured / nrow(hdb_spatial)
+print(percentage_captured)
+#1km radius: 68% HDB captured
+#1.5km radius: 87% HDB captured
+#2km radius: 94% HDB captured
 
