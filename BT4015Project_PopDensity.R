@@ -83,7 +83,7 @@ coordinates <- cbind(nightlife$lng, nightlife$lat)
 nightlife_sp_data <- SpatialPointsDataFrame(coordinates, data = data.frame(nightlife), proj4string = CRS("+proj=longlat +datum=WGS84"))
 # convert to sf 
 nightlife_sf_data <- st_as_sf(nightlife_sp_data) 
-nightlife_buffer <- st_buffer(nightlife_sf_data, dist = 2500)
+nightlife_buffer <- st_buffer(nightlife_sf_data, dist = 100)
 
 
 tm_shape(base_map) + tm_borders() + 
@@ -377,4 +377,41 @@ print(percentage_captured)
 #1km radius: 68% HDB captured
 #1.5km radius: 87% HDB captured
 #2km radius: 94% HDB captured
+
+
+#Onto finding ideal busstops for nightlife
+
+nightlife_points <- as(nightlife_sf_data, "Spatial")
+nightlife_centers <- kde.points(nightlife_points, h = 0.005) #550m walking distance max
+nightlife_centers_sf <- st_as_sf(nightlife_centers)
+
+tm_shape(nightlife_centers) + tm_raster()
+
+reclass_values_2 <- c(0,2000,1, #reclassify kde values from 0-50 in group 1 and so on
+                    2000,4000,2,
+                    4000,6000,3,
+                    6000,8000,4)
+
+reclass_nightlife_centers <- reclassify(as(nightlife_centers, "RasterLayer"), reclass_values_2) #reclassify kde values to groups
+nightlife_centers_poly <- rasterToPolygons(reclass_nightlife_centers, dissolve = T) #to make a polygon layer
+nightlife_centers_poly <- st_as_sf(nightlife_centers_poly) #to make an SF object
+nightlife_centers_poly <- nightlife_centers_poly[-c(1,2),] #remove polys with low kde values 
+nightlife_centers_poly <- st_cast(nightlife_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
+
+#Central area of SG
+central_area <- base_map %>% filter(PLN_AREA_N %in% c('DOWNTOWN CORE', 'BUKIT MERAH', 'SINGAPORE RIVER', 'MUSEUM', 'RIVER VALLEY', 'ORCHARD','NEWTON','ROCHOR','TANGLIN', 'KALLANG'))
+
+#map to show how the kde looks like with all hdbs
+tm_shape(central_area) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
+  tm_shape(nightlife_sf_data) + tm_bubbles(size = 0.01, col = "black")  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Nightlife locations in Singapore",
+            title.position = c('left', 'top'))
+
 
