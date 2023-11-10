@@ -103,37 +103,37 @@ tm_shape(base_map) + tm_borders() +
 coordinates(data) <- ~longitude+latitude
 
 # Define the extent of the raster based on the spatial object
-raster_extent <- extent(data)
+# raster_extent <- extent(data)
 
 # Create an empty raster
-r <- raster(raster_extent, resolution=c(0.001, 0.001)) # Here 0.001 is an example resolution. Adjust as necessary.
+# r <- raster(raster_extent, resolution=c(0.001, 0.001)) # Here 0.001 is an example resolution. Adjust as necessary.
 
 #Rasterise the data
-under5_raster <- rasterize(data, r, field="under5", fun=mean)
+# under5_raster <- rasterize(data, r, field="under5", fun=mean)
+# 
+# plot(under5_raster)
+# 
+# ppp_data <- as.ppp(data)
+# plot(ppp_data)
+# 
+# # Compute mean center
+# mean_center <- with(ppp_data, c(mean(x), mean(y)))
+# print(mean_center)
+# 
+# # Compute weighted mean center for 'under5' column
+# weights <- data$under5
+# weighted_mean_center <- with(ppp_data, c(weighted.mean(x, w=weights), weighted.mean(y, w=weights)))
+# print(weighted_mean_center)
+# plot(weighted_mean_center)
 
-plot(under5_raster)
-
-ppp_data <- as.ppp(data)
-plot(ppp_data)
-
-# Compute mean center
-mean_center <- with(ppp_data, c(mean(x), mean(y)))
-print(mean_center)
-
-# Compute weighted mean center for 'under5' column
-weights <- data$under5
-weighted_mean_center <- with(ppp_data, c(weighted.mean(x, w=weights), weighted.mean(y, w=weights)))
-print(weighted_mean_center)
-plot(weighted_mean_center)
-
-# Quadrat Test
-qtest <- quadrat.test(ppp_data)
-print(qtest)
-plot(qtest)
-
-# K-function
-Kest <- envelope(ppp_data, fun=Kest)
-plot(Kest)
+# # Quadrat Test
+# qtest <- quadrat.test(ppp_data)
+# print(qtest)
+# plot(qtest)
+# 
+# # K-function
+# Kest <- envelope(ppp_data, fun=Kest)
+# plot(Kest)
 
 #Frequency of all column values
 table(data$under5)
@@ -149,9 +149,8 @@ sdd <- sqrt(with(ppp_data, sum((x - mean_center[1])^2 + (y - mean_center[2])^2) 
 print(sdd)
 
 #Explore Point of Interest (POI) data
-colnames(poi)
-bar_club <- poi %>% filter(bar == "True" | night_club == "True")
-bar_club %>% select(name,lat,lng)
+# bar_club <- poi %>% filter(bar == "True" | night_club == "True")
+# bar_club %>% select(name,lat,lng)
 
 #Youth polygon
 yth_spatial <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
@@ -217,8 +216,8 @@ ggplot() +
 
 
 # K-nearest neighbors (KNN) method: # Perform Moran's I test
-w <- knn2nb(knearneigh(coordinates(data), k = 5))  # Adjust 'k' as needed
-w_listw <- nb2listw(w)
+# w <- knn2nb(knearneigh(coordinates(data), k = 5))  # Adjust 'k' as needed
+# w_listw <- nb2listw(w)
 
 #*W output
 #*Neighbour list object:
@@ -227,24 +226,24 @@ w_listw <- nb2listw(w)
 #*Percentage nonzero weights: 0.002303574 
 #*Average number of links: 5 
 
-
-moran_test <- moran.test(x = data$youth, listw = w_listw)
-print(moran_test)
-#* output is p-value of < 2.2e-16
-#* Moran I statistic       Expectation          Variance 
-#* 9.974184e-01     -4.607170e-06      1.693194e-06
-
-
-#Kernel Density estimation
-ppp_data <- ppp(
-  data$longitude,
-  data$latitude,
-  window = owin(range(data$longitude), range(data$latitude))
-)
-
-# Perform kernel density estimation
-kde <- density(ppp_data)
-plot(kde)
+# 
+# moran_test <- moran.test(x = data$youth, listw = w_listw)
+# print(moran_test)
+# #* output is p-value of < 2.2e-16
+# #* Moran I statistic       Expectation          Variance 
+# #* 9.974184e-01     -4.607170e-06      1.693194e-06
+# 
+# 
+# #Kernel Density estimation
+# ppp_data <- ppp(
+#   data$longitude,
+#   data$latitude,
+#   window = owin(range(data$longitude), range(data$latitude))
+# )
+# 
+# # Perform kernel density estimation
+# kde <- density(ppp_data)
+# plot(kde)
 
 
 #Lets try here
@@ -266,7 +265,7 @@ tm_shape(base_map) + tm_borders() +
 #KDE plot
 
 hdb_points <- as(joined, "Spatial")
-hdb_centers <- kde.points(hdb_points, h = 0.01) 
+hdb_centers <- kde.points(hdb_points, h = 0.013) #1.4km bandwidth 
 hdb_centers_sf <- st_as_sf(hdb_centers)
 
 plot(hdb_centers) 
@@ -352,7 +351,7 @@ tm_shape(base_map) + tm_borders() +
             title.position = c('left', 'top'))
 
 #create buffers for each centroid
-closest_busstops_buffer <- st_buffer(closest_busstops, dist = 1500) #1km buffer
+closest_busstops_buffer <- st_buffer(closest_busstops, dist = 1500) #1.5km buffer
 closest_busstops_buffer <- st_union(closest_busstops_buffer) #join the buffers together
 closest_busstops_buffer <- st_cast(closest_busstops_buffer,'POLYGON') #join the buffers together
 closest_busstops_buffer <- st_make_valid(closest_busstops_buffer)
@@ -374,23 +373,23 @@ tm_shape(base_map) + tm_borders() +
 num_hdb_captured <- nrow(st_intersection(hdb_spatial, closest_busstops_buffer))
 percentage_captured <- num_hdb_captured / nrow(hdb_spatial)
 print(percentage_captured)
-#1km radius: 68% HDB captured
-#1.5km radius: 87% HDB captured
-#2km radius: 94% HDB captured
+#1km radius: 68% HDB captured #not valid because need to change bandwidth
+#1.5km radius: 84% HDB captured
+#2km radius: 94% HDB captured #not valid because need to change bandwidth
 
 
 #Onto finding ideal busstops for nightlife
 
 nightlife_points <- as(nightlife_sf_data, "Spatial")
-nightlife_centers <- kde.points(nightlife_points, h = 0.005) #550m walking distance max
+nightlife_centers <- kde.points(nightlife_points, h = 0.009) #1km smoothing
 nightlife_centers_sf <- st_as_sf(nightlife_centers)
 
 tm_shape(nightlife_centers) + tm_raster()
 
-reclass_values_2 <- c(0,2000,1, #reclassify kde values from 0-50 in group 1 and so on
-                    2000,4000,2,
-                    4000,6000,3,
-                    6000,8000,4)
+reclass_values_2 <- c(0,1000,1, #reclassify kde values from 0-1000 in group 1 and so on
+                    1000,2000,2,
+                    2000,3000,3,
+                    3000,4000,4)
 
 reclass_nightlife_centers <- reclassify(as(nightlife_centers, "RasterLayer"), reclass_values_2) #reclassify kde values to groups
 nightlife_centers_poly <- rasterToPolygons(reclass_nightlife_centers, dissolve = T) #to make a polygon layer
@@ -401,7 +400,7 @@ nightlife_centers_poly <- st_cast(nightlife_centers_poly,'POLYGON') #to split mu
 #Central area of SG
 central_area <- base_map %>% filter(PLN_AREA_N %in% c('DOWNTOWN CORE', 'BUKIT MERAH', 'SINGAPORE RIVER', 'MUSEUM', 'RIVER VALLEY', 'ORCHARD','NEWTON','ROCHOR','TANGLIN', 'KALLANG'))
 
-#map to show how the kde looks like with all hdbs
+#map to show how the kde looks like with all nightlife spots
 tm_shape(central_area) + tm_borders() + 
   tm_basemap('OpenStreetMap') + 
   tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
@@ -414,4 +413,55 @@ tm_shape(central_area) + tm_borders() +
             title="Nightlife locations in Singapore",
             title.position = c('left', 'top'))
 
+#get the centroids of each polygon
+nightlife_centers_points <- st_centroid(nightlife_centers_poly)
+#find closest busstop to each centroid
+closest_nightlife_busstops_index <- st_nearest_feature(nightlife_centers_points, bus_spatial)
+closest_nightlife_busstops <- bus_spatial[closest_nightlife_busstops_index,]
 
+tm_shape(central_area) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
+  tm_shape(nightlife_centers_points) + tm_bubbles(size = 0.05, col = "black")  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Nightlife locations centers in Singapore",
+            title.position = c('left', 'top'))
+
+tm_shape(central_area) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
+  tm_shape(closest_nightlife_busstops) + tm_bubbles(size = 0.05, col = "black")  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Busstops closest to centers in Singapore",
+            title.position = c('left', 'top'))
+
+closest_nightlife_busstops_buffer <- st_buffer(closest_nightlife_busstops, dist = 500) #500m buffer
+closest_nightlife_busstops_buffer <- st_union(closest_nightlife_busstops_buffer) #join the buffers together
+closest_nightlife_busstops_buffer <- st_cast(closest_nightlife_busstops_buffer,'POLYGON') #join the buffers together
+closest_nightlife_busstops_buffer <- st_make_valid(closest_nightlife_busstops_buffer)
+
+#map to show how the kde looks like with all nightlife spots
+tm_shape(central_area) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(closest_nightlife_busstops_buffer) + tm_fill(col = 'yellow') + tm_borders() +
+  tm_shape(nightlife_sf_data) + tm_bubbles(size = 0.025, col = "black")  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Busstop buffer for nightlife locations in Singapore",
+            title.position = c('left', 'top'))
+
+num_nightlife_captured <- nrow(st_intersection(nightlife_sf_data, closest_nightlife_busstops_buffer))
+percentage_captured <- num_hdb_captured / nrow(nightlife_sf_data)
+print(percentage_captured)
+#500m radius: 66.7% nightlife captured
