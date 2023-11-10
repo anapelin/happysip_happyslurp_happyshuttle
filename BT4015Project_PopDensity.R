@@ -465,3 +465,10 @@ num_nightlife_captured <- nrow(st_intersection(nightlife_sf_data, closest_nightl
 percentage_captured <- num_hdb_captured / nrow(nightlife_sf_data)
 print(percentage_captured)
 #500m radius: 66.7% nightlife captured
+
+df_hex_nightlife = st_as_sf(closest_nightlife_busstops)                                                                                                                 
+st_write(df_hex_nightlife, "bus_stops_within_buffers_nightlife.geojson")
+
+df_hex = st_as_sf(closest_busstops)                                                                                                                 
+st_write(df_hex, "bus_stops_within_buffers.geojson")
+
