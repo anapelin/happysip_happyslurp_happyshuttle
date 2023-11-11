@@ -31,16 +31,18 @@ library(jsonlite)
 
 # 2. Handling Data
 # 2.1 Loading Raw Datafiles
-# Base Map
-base_map <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+# Basemap - Singapore Subzones (Polygons Vectors)
+subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
 
-# Population + HDB Data
-data <- read.csv("dataset/filteredSG_population_density.csv")
+# Youth Population + HDB Distribution (Points Vectors)
+population <- read.csv("dataset/filteredSG_population_density.csv")
 hdb <- read.csv("dataset/hdb.csv") %>% mutate(addr = paste(blk_no,street)) %>% select(addr,lat,lng)
 yth_data <- read.csv("dataset/filteredSG_population_density.csv") %>% select(longitude, latitude, youth)
 
+coordinates(population) <- ~longitude+latitude
 
-# Nightlife (Bars + Clubs) Crowd Density Data
+
+# Nightlife (Bars + Clubs) Crowd Density Data (Points Vectors)
 rawdata_bars <- fromJSON("dataset/besttime/bars.json", flatten=TRUE)
 rawdata_clubs <- fromJSON("dataset/besttime/clubs.json", flatten=TRUE)
 relevant_columns <- c("venue_lat", "venue_lon", "venue_name")
@@ -63,21 +65,29 @@ nightlife <- setNames(nightlife, new_column_names)
 
 # 3. Preprocessing Data to Vectors/Rasters
 # 3.1 Nightlife Locations
-# Create a spatial data frame with points
+
+# Create a Nightlife Spatial Points DataFrame
 coordinates <- cbind(nightlife$lng, nightlife$lat) 
-
-# Convert the dataframe to a SpatialPointsDataFrame
 nightlife_sp_data <- SpatialPointsDataFrame(coordinates, data = data.frame(nightlife), proj4string = CRS("+proj=longlat +datum=WGS84"))
-# convert to sf 
-nightlife_sf_data <- st_as_sf(nightlife_sp_data) 
-nightlife_buffer <- st_buffer(nightlife_sf_data, dist = 2500)
+nightlife_sf <- st_as_sf(nightlife_sp_data) 
+# project to basemap's CRS
+nightlife_sf <- st_transform(nightlife_sf, crs=st_crs(subzone))
 
+# Convert to Nightlife Point Pattern dataset
+nightlife.ppp <- as.ppp(nightlife_sf)
+
+# Combine with subzones for Nightlife Density DataFrame
+nightlife_subzone <- st_join(subzones, nightlife_sf)
+nightlife_density_subzone <- nightlife_subzone %>%
+  group_by(SUBZONE_N) %>%
+  summarize(bar_density = sum(!is.na(name)))
+
+# Map 1: View of nightlife locations in Singapore
+tmap_mode('view')
 
 tm_shape(base_map) + tm_borders() + 
   tm_basemap('OpenStreetMap') + 
-  tm_shape(nightlife_sf_data) + tm_bubbles(size = 0.1, col = "red") +
-  tm_shape(nightlife_buffer) + tm_polygons() +
-  tm_compass(type="8star", size = 2) +
+  tm_shape(nightlife_sf_data) + tm_dots(size = 0.0075, col = "red") +
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
@@ -87,20 +97,21 @@ tm_shape(base_map) + tm_borders() +
             title.position = c('left', 'bottom'))
 
 
-coordinates(data) <- ~longitude+latitude
+# 3.2 Population Density
 
 # Define the extent of the raster based on the spatial object
-raster_extent <- extent(data)
+raster_extent <- extent(population)
 
 # Create an empty raster
 r <- raster(raster_extent, resolution=c(0.001, 0.001)) # Here 0.001 is an example resolution. Adjust as necessary.
 
 #Rasterise the data
-under5_raster <- rasterize(data, r, field="under5", fun=mean)
+under5_raster <- rasterize(population, r, field="under5", fun=mean)
 
 plot(under5_raster)
 
-ppp_data <- as.ppp(data)
+# convert data to point pattern dataset
+ppp_data <- as.ppp(population)
 plot(ppp_data)
 
 # Compute mean center
