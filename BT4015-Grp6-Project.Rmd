@@ -30,6 +30,9 @@ library(osmdata)
 
 # 2.1 Basemap - Singapore Subzones (Polygons Vectors)
 subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
+base_map <- base_map %>% select(ISO)
+base_map <- st_transform(base_map, crs=st_crs(subzones))
 
 # 2.2 Nightlife (Bars + Clubs) Data (Points Vectors)
 query <- opq(bbox = "singapore, singapore") %>% 
@@ -41,6 +44,7 @@ nightlife_plg <- rawdata_nightlife$osm_polygons %>% drop_na(name) %>%
   dplyr::select(name, amenity, `addr:postcode`, `addr:street`) %>%
   st_centroid()
 nightlife <- rbind(nightlife_points, nightlife_plg)
+
 # 2.3 Midnight Restaurants Crowd Density Data
 rawdata_restaurants <- read.csv("dataset/besttime/restaurants.csv")
 # Restaurant DataFrame: lat, lng, name of restaurant, is_midnight, crowd density on fri and sat
@@ -76,6 +80,7 @@ for(i in 0:10) {
 
 # Create a Nightlife Spatial Points DataFrame
 nightlife_sf <- st_transform(nightlife, crs=st_crs(subzones)) # project to basemap's CRS
+nightlife_sf <- st_intersection(nightlife_sf, base_map) # remove extra points
 
 # Convert to Nightlife Point Pattern dataset
 nightlife_ppp <- as.ppp(nightlife_sf)
@@ -84,7 +89,8 @@ nightlife_ppp <- as.ppp(nightlife_sf)
 nightlife_subzone <- st_join(subzones, nightlife_sf)
 nightlife_density_subzone <- nightlife_subzone %>%
   group_by(SUBZONE_N) %>%
-  summarize(bar_density = sum(!is.na(name)))
+  summarize(nightlife_density = sum(!is.na(name)))
+
 
 # 3.2 Midnight Restaurants
 
@@ -125,16 +131,14 @@ bus_sf <- st_transform(bus_sf, crs = st_crs(subzones)) # project to basemap's CR
 
 ```
 
-### 4. Basic Spatial Operations
+### 4. Analysis on Distribution of Nightlife location in Singapore
 ```{r spatial operations}
-
-# Map 1: View of All Distributions (with toggles for layers)
-tmap_mode('view')
+tmap_mode('plot')
 tmap_options(check.and.fix = TRUE)
-tm_shape(subzones) + tm_borders() + tm_basemap(server='Esri.WorldGrayCanvas') + 
+# Local Density - Quadrat
+
+tm_shape(base_map) + tm_borders(col='black') + 
   tm_shape(nightlife_sf) + tm_dots(size = 0.0075, col = "red") + # Nightlife locations
-  tm_shape(restaurants_sf) + tm_dots(size = 0.0075, col = "midnight_restaurant", palette = c("yellow", "blue")) + # Restaurants
-  # tm_shape(yth_sf) + tm_dots(size = 0.0075, col = c("pink")) + # Restaurants
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
@@ -144,8 +148,19 @@ tm_shape(subzones) + tm_borders() + tm_basemap(server='Esri.WorldGrayCanvas') +
             title.position = c('left', 'bottom'))
 
 
-```
-``` {r test}
-test$osm_points
+# Local Density - By Subzone
+tm_shape(base_map) + tm_borders(col='black') + 
+  tm_shape(nightlife_density_subzone) + tm_polygons(col = "nightlife_density") + 
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Nightlife location in Singapore",
+            title.position = c('left', 'bottom'))
+# KDE
+
+
 
 ```
+
