@@ -1,6 +1,8 @@
 ---
 title: "Project"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 date: "2023-10-09"
 ---
 ### 1. Setting up
@@ -30,11 +32,14 @@ library(osmdata)
 subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
 
 # 2.2 Nightlife (Bars + Clubs) Data (Points Vectors)
-query <- opq(bbox = "singapore") |> 
+query <- opq(bbox = "singapore, singapore") %>% 
   add_osm_feature(key = "amenity", value = c("bar","biergarten", "pub", "nightclub"))
 rawdata_nightlife <- osmdata_sf(query)
-nightlife_points <- rawdata_nightlife$osm_points %>% drop_na(name) %>% filter(amenity %in% c("bar","biergarten", "pub", "nightclub")) %>% dplyr::select(name, amenity, `addr:postcode`, `addr:street`) 
-nightlife_plg <- rawdata_nightlife$osm_polygons %>% drop_na(name) %>% filter(amenity %in% c("bar","biergarten", "pub", "nightclub")) %>% dplyr::select(name, amenity, `addr:postcode`, `addr:street`) %>% st_centroid()
+nightlife_points <- rawdata_nightlife$osm_points %>% drop_na(name) %>%
+  dplyr::select(name, amenity, `addr:postcode`, `addr:street`) 
+nightlife_plg <- rawdata_nightlife$osm_polygons %>% drop_na(name) %>%
+  dplyr::select(name, amenity, `addr:postcode`, `addr:street`) %>%
+  st_centroid()
 nightlife <- rbind(nightlife_points, nightlife_plg)
 # 2.3 Midnight Restaurants Crowd Density Data
 rawdata_restaurants <- read.csv("dataset/besttime/restaurants.csv")
