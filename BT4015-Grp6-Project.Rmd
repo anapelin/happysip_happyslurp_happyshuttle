@@ -3,7 +3,7 @@ title: "Project"
 output: html_document
 date: "2023-10-09"
 ---
-
+### 1. Setting up
 ```{r setup, include=FALSE}
 library(GISTools)
 library(raster)
@@ -20,25 +20,22 @@ library(spatstat)
 library(spdep)
 library(jsonlite)
 library(dplyr)
+library(osmdata)
 ```
 
-```{r data, include=FALSE}
+### 2. Loading Data
+```{r data loading, include=FALSE}
 
 # 2.1 Basemap - Singapore Subzones (Polygons Vectors)
 subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
 
 # 2.2 Nightlife (Bars + Clubs) Data (Points Vectors)
-rawdata_bars <- fromJSON("dataset/besttime/bars.json", flatten=TRUE)
-rawdata_clubs <- fromJSON("dataset/besttime/clubs.json", flatten=TRUE)
-relevant_columns <- c("venue_lat", "venue_lon", "venue_name")
-bars <- rawdata_bars$venues[relevant_columns]
-clubs <- rawdata_clubs$venues[relevant_columns]
-# Nightlife DataFrame: lat, lng, name of place, crowd density
-nightlife <- rbind(bars, clubs)
-new_column_names <- c("lat", "lng", "name")
-nightlife <- setNames(nightlife, new_column_names)
-nightlife_coordinates <- cbind(nightlife$lng, nightlife$lat) 
-
+query <- opq(bbox = "singapore") |> 
+  add_osm_feature(key = "amenity", value = c("bar","biergarten", "pub", "nightclub"))
+rawdata_nightlife <- osmdata_sf(query)
+nightlife_points <- rawdata_nightlife$osm_points %>% drop_na(name) %>% filter(amenity %in% c("bar","biergarten", "pub", "nightclub")) %>% dplyr::select(name, amenity, `addr:postcode`, `addr:street`) 
+nightlife_plg <- rawdata_nightlife$osm_polygons %>% drop_na(name) %>% filter(amenity %in% c("bar","biergarten", "pub", "nightclub")) %>% dplyr::select(name, amenity, `addr:postcode`, `addr:street`) %>% st_centroid()
+nightlife <- rbind(nightlife_points, nightlife_plg)
 # 2.3 Midnight Restaurants Crowd Density Data
 rawdata_restaurants <- read.csv("dataset/besttime/restaurants.csv")
 # Restaurant DataFrame: lat, lng, name of restaurant, is_midnight, crowd density on fri and sat
@@ -67,16 +64,13 @@ for(i in 0:10) {
 
 ```
 
-## 
+### 3. Transforming to Spatial Data
 
-```{r maps}
-# 3. Preprocessing Data to DataFrames/Vectors/Rasters
+```{r data transformation}
 # 3.1 Nightlife Locations
 
 # Create a Nightlife Spatial Points DataFrame
-nightlife_sp_data <- SpatialPointsDataFrame(nightlife_coordinates, data = data.frame(nightlife), proj4string = CRS("+proj=longlat +datum=WGS84"))
-nightlife_sf <- st_as_sf(nightlife_sp_data) 
-nightlife_sf <- st_transform(nightlife_sf, crs=st_crs(subzone)) # project to basemap's CRS
+nightlife_sf <- st_transform(nightlife, crs=st_crs(subzones)) # project to basemap's CRS
 
 # Convert to Nightlife Point Pattern dataset
 nightlife_ppp <- as.ppp(nightlife_sf)
@@ -109,11 +103,9 @@ restaurants_density_subzone <- restaurants_subzone %>%
 r <- raster(extent(population), resolution=c(0.001, 0.001)) # Here 0.001 is an example resolution. Adjust as necessary.
 under5_raster <- rasterize(population, r, field="under5", fun=mean)
 
-plot(under5_raster)
-
 # Convert to Population Point Pattern dataset
 ppp_data <- as.ppp(population)
-plot(ppp_data)
+
 # Create a Youth Spatial Polygon DataFrame
 yth_sf <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
 yth_sf <- st_transform(yth_sf, crs = st_crs(subzones)) # project to basemap's CRS
@@ -128,17 +120,27 @@ bus_sf <- st_transform(bus_sf, crs = st_crs(subzones)) # project to basemap's CR
 
 ```
 
-ssdsd
-```{r spatialKDE}
-combined_data <- st_join(subzones, nightlife_sf)
-View(combined_data)
-density_count <- combined_data %>%
-  group_by(SUBZONE_N) %>%
-  summarize(bar_density = sum(!is.na(name)))
-density_count
+### 4. Basic Spatial Operations
+```{r spatial operations}
+
+# Map 1: View of All Distributions (with toggles for layers)
+tmap_mode('view')
+tmap_options(check.and.fix = TRUE)
+tm_shape(subzones) + tm_borders() + tm_basemap(server='Esri.WorldGrayCanvas') + 
+  tm_shape(nightlife_sf) + tm_dots(size = 0.0075, col = "red") + # Nightlife locations
+  tm_shape(restaurants_sf) + tm_dots(size = 0.0075, col = "midnight_restaurant", palette = c("yellow", "blue")) + # Restaurants
+  # tm_shape(yth_sf) + tm_dots(size = 0.0075, col = c("pink")) + # Restaurants
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Nightlife location in Singapore",
+            title.position = c('left', 'bottom'))
+
+
 ```
-## Including Plots
+``` {r test}
+test$osm_points
 
-You can also embed plots, for example:
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```
