@@ -61,7 +61,7 @@ nightlife_sf <- st_intersection(nightlife_sf, base_map) # remove nightlife point
 
 
 # 2.3 Restaurants 
-restaurants <- read.csv("dataset/grab.csv") %>% select(name, address, lat, lon)
+restaurants <- read.csv("dataset/midnight_restaurants.csv")
 restaurant_coordinates <- cbind(restaurants$lon, restaurants$lat)
 
 # Convert restaurants dataframe to a SpatialPointsDataFrame
@@ -72,6 +72,7 @@ restaurants_sf <- st_intersection(restaurants_sf, base_map) # remove restaurant 
 
 # View all nightlife locations in Singapore
 nightlife_basemap_plot(base_map, nightlife_sf, "view")
+nightlife_basemap_plot(base_map, restaurants_sf, "view")
 ```
 
 # 4. Filter regions of interest (central regions of Singapore)
@@ -98,3 +99,4 @@ nightlife_basemap_plot(base_map, restaurant_filtered_sf, "view")
 st_write(nightlife_filtered_sf, "dataset/processed_datasets/nightlife_locations.geojson", append=FALSE)
 st_write(restaurant_filtered_sf, "dataset/processed_datasets/restaurants.geojson", append=FALSE)
 ```
+
