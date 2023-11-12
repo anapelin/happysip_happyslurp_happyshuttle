@@ -62,7 +62,7 @@ nightlife_basemap_plot(base_map, nightlife_sf, "view")
 ```
 
 # 4. Filter regions of interest (central regions of Singapore)
-We are choosing to narrow our scope to nightlife locations in the central regions of Singapore. After close inspection of the basemap polygons, we define these central regions as Downtown Core, Singapore River, Rochor, Outram and Lavendar.
+We are choosing to narrow our scope to nightlife locations in the central regions of Singapore. After close inspection of the basemap polygons, we define these central regions as Downtown Core, Singapore River, Rochor, Outram and Lavender.
 ```{r , echo=TRUE}
 # Filter polygons of interest
 central_plg <- subzones %>% filter(PLN_AREA_C %in% c("DT", "SR", "RC", "OT") | SUBZONE_N %in% c("LAVENDER"))
@@ -82,5 +82,5 @@ nightlife_basemap_plot(base_map, nightlife_filtered_sf, "view")
 
 # 4. Save nightlife and basemap
 ```{r}
-st_write(nightlife_filtered_sf, "dataset/processed_datasets/nightlife_locations", driver = "ESRI Shapefile")
+st_write(nightlife_filtered_sf, "dataset/processed_datasets/nightlife_locations.geojson")
 ```
