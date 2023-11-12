@@ -33,13 +33,14 @@ nightlife_basemap_plot <- function(base_plg, nightlife_sf,mode) {
 }
 ```
 
-# 3. Loading datasets
+# 3. Loading and processing of datasets
 ```{r data loading}
 # 2.1 Basemap - Singapore Subzones (Polygons Vectors)
 subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
 base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
 base_map <- base_map %>% select(ISO)
 base_map <- st_transform(base_map, crs=st_crs(subzones))
+
 
 # 2.2 Nightlife (Bars + Clubs) Data (Points Vectors)
 query <- opq(bbox = "singapore, singapore") %>% 
@@ -58,6 +59,18 @@ nightlife <- rbind(nightlife_points, nightlife_plg)
 nightlife_sf <- st_transform(nightlife, crs=st_crs(subzones)) # project to basemap's CRS
 nightlife_sf <- st_intersection(nightlife_sf, base_map) # remove nightlife points that lie outside of basemap
 
+
+# 2.3 Restaurants 
+restaurants <- read.csv("dataset/grab.csv") %>% select(name, address, lat, lon)
+restaurant_coordinates <- cbind(restaurants$lon, restaurants$lat)
+
+# Convert restaurants dataframe to a SpatialPointsDataFrame
+restaurants_sp <- SpatialPointsDataFrame(restaurant_coordinates, data = data.frame(restaurants), proj4string = CRS("+proj=longlat +datum=WGS84"))
+restaurants_sf <- st_as_sf(restaurants_sp)
+restaurants_sf <- st_transform(restaurants_sf, crs = st_crs(subzones)) # project to basemap's CRS
+restaurants_sf <- st_intersection(restaurants_sf, base_map) # remove restaurant points that lie outside of basemap
+
+# View all nightlife locations in Singapore
 nightlife_basemap_plot(base_map, nightlife_sf, "view")
 ```
 
@@ -69,18 +82,19 @@ central_plg <- subzones %>% filter(PLN_AREA_C %in% c("DT", "SR", "RC", "OT") | S
 
 # Plot with filtered polygons
 nightlife_basemap_plot(central_plg, nightlife_sf, "view")
-View(subzones)
-
 ```
 
-# 4. Filter nightlife locations that lie in filtered polygons
+# 5. Filter nightlife and restaurant locations that lie in filtered polygons
 ```{r , echo=TRUE}
 nightlife_filtered_sf <- st_intersection(nightlife_sf, central_plg)
+restaurant_filtered_sf <- st_intersection(restaurants_sf, central_plg)
 
 nightlife_basemap_plot(base_map, nightlife_filtered_sf, "view")
+nightlife_basemap_plot(base_map, restaurant_filtered_sf, "view")
 ```
 
-# 4. Save nightlife and basemap
+# 6. Save filtered nightlife and restaurants
 ```{r}
-st_write(nightlife_filtered_sf, "dataset/processed_datasets/nightlife_locations.geojson")
+st_write(nightlife_filtered_sf, "dataset/processed_datasets/nightlife_locations.geojson", append=FALSE)
+st_write(restaurant_filtered_sf, "dataset/processed_datasets/restaurants.geojson", append=FALSE)
 ```
