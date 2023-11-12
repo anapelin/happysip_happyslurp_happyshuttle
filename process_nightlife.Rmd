@@ -6,19 +6,10 @@ output: html_document
 # 1. Loading all necessary libraries 
 ```{r setup}
 library(GISTools)
-library(raster)
 library(tmap)
-# library(rgdal) 
 library(maptools) 
 library(sp)
 library(sf)
-library(tidyverse)
-library(rgeos)
-library(ggplot2)
-library(psych)
-library(spatstat)
-library(spdep)
-library(jsonlite)
 library(dplyr)
 library(osmdata)
 ```
