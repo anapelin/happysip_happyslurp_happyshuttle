@@ -162,5 +162,51 @@ tm_shape(base_map) + tm_borders(col='black') +
 
 
 
+
 ```
 
+```{r central area point pattern}
+central_plg <- subzones %>% filter(PLN_AREA_C %in% c("DT", "SR", "RC", "OT") | SUBZONE_N %in% c("LAVENDER"))
+
+nightlife_filtered_sf <- st_intersection(nightlife_sf, central_plg)
+restaurant_filtered_sf <- st_intersection(restaurants_sf, central_plg)
+
+midnight_restaurant_filtered_sf <- restaurant_filtered_sf %>% filter(midnight_restaurant == 'True')
+
+tm_shape(central_plg) + tm_borders(col='black') + 
+  tm_shape(nightlife_filtered_sf) + tm_dots(col = "red") + 
+  tm_shape(restaurant_filtered_sf) + tm_dots(col = "blue") +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Nightlife location in Singapore",
+            title.position = c('left', 'bottom'))
+
+
+
+nightlife_ppp <- as.ppp(nightlife_filtered_sf)
+marks(nightlife_ppp) <- "nightlife"
+restaurants_ppp <- as.ppp(restaurant_filtered_sf)
+marks(restaurants_ppp) <- "latenight restaurants"
+P <- superimpose(nightlife_ppp, restaurants_ppp)
+# hypothesis testing for the 1
+nn.sim = vector()
+P.r = P
+for(i in 1:999){
+  marks(P.r) = sample(P$marks)  # Reassign labels at random, point locations don't change
+  nn.sim[i] = mean(nncross(P.r[P.r$marks == "nightlife", ] ,P.r[P.r$marks == "latenight restaurants", ])$dist)
+}
+hist(nn.sim,breaks=30, xlim=c(0,140))
+abline(v=mean(nncross(P[P$marks == "nightlife", ] ,P[P$marks == "latenight restaurants", ])$dist),col="red")
+
+# Compute empirical cumulative distribution
+nn.sim.ecdf = ecdf(nn.sim)
+
+# See how the original stat compares to the simulated distribution
+nn.sim.ecdf(mean(nncross(P[P$marks == "nightlife", ] ,P[P$marks == "latenight restaurants", ])$dist)) 
+
+```
+
+As the p-value is 0, we  strong evidence that the observed data is unlikely to have occured by random chance
