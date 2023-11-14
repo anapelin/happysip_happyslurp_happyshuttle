@@ -1,0 +1,174 @@
+---
+title: "restaurants"
+output:
+  pdf_document: default
+  html_document: default
+date: "2023-10-09"
+---
+### 1. Setting up
+```{r setup, include=FALSE}
+library(GISTools)
+library(raster)
+library(tmap)
+# library(rgdal) 
+library(maptools) 
+library(sp)
+library(sf)
+library(tidyverse)
+library(rgeos)
+library(ggplot2)
+library(psych)
+library(spatstat)
+library(spdep)
+library(jsonlite)
+library(dplyr)
+library(osmdata)
+```
+
+### 2. Loading Data
+```{r data loading}
+# Load basemap
+subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
+base_map <- base_map %>% select(ISO)
+base_map <- st_transform(base_map, crs=st_crs(subzones))
+
+# Load nightlife locations
+nightlife_sf <- st_read("dataset/processed_datasets/nightlife_locations.geojson", crs=st_crs(subzones))
+nightlife_sf <- st_transform(nightlife_sf, crs=st_crs(subzones)) # project to basemap's CRS
+
+# Load restaurants
+restaurants_sf <- st_read("dataset/processed_datasets/restaurants.geojson", crs=st_crs(subzones))
+restaurants_sf <- st_transform(restaurants_sf, crs=st_crs(subzones)) # project to basemap's CRS
+```
+
+### 3. PLot nighlife and restaurant locations
+```{r plot}
+# Plot of nightlife locations only
+tm_shape(base_map) + tm_borders(col='black') + 
+  tm_shape(nightlife_sf) + tm_dots(size = 0.01, col = "black") +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Nightlife location in Singapore",
+            title.position = c('left', 'bottom'))
+
+# Plot of restaurant locations only
+tm_shape(base_map) + tm_borders(col='black') + 
+  tm_shape(restaurants_sf) + tm_dots(size = 0.01, col = "midnight_restaurant") +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Nightlife location in Singapore",
+            title.position = c('left', 'bottom'))
+
+# Plot of nightlife and midnight restaurant locations only
+midnight_restaurants <- restaurants_sf %>%
+  filter(midnight_restaurant == "True")
+
+non_midnight_restaurants <- restaurants_sf %>%
+  filter(midnight_restaurant == "False")
+
+tm_shape(base_map) + tm_borders(col='black') + 
+  tm_shape(nightlife_sf) + tm_dots(size = 0.01, col = "black") +
+  tm_shape(midnight_restaurants) + tm_dots(size = 0.01, col = "blue") +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Nightlife location in Singapore",
+            title.position = c('left', 'bottom'))
+```
+
+```{r}
+nightlife_points <- as(nightlife_sf, "Spatial")
+nightlife_centers <- kde.points(nightlife_points, h = 500)
+nightlife_centers_sf <- st_as_sf(nightlife_centers)
+
+tmap_mode("view")
+tm_shape(nightlife_centers) + tm_raster()
+```
+
+
+```{r}
+reclass_values <- c(0,0.0000002,1, #reclassify kde values from 0-0.0000002 in group 1 and so on
+                    0.0000002,0.0000004,2,
+                    0.0000004,0.0000006,3,
+                    0.0000006,0.0000008,4,
+                    0.0000008,0.0000010,5,
+                    0.0000010,0.0000012,6)
+
+reclass_nightlife_centers <- reclassify(as(nightlife_centers, "RasterLayer"), reclass_values) #reclassify kde values to groups
+nightlife_centers_poly <- rasterToPolygons(reclass_nightlife_centers, dissolve = T) #to make a polygon layer
+nightlife_centers_poly <- st_as_sf(nightlife_centers_poly) #to make an SF object
+nightlife_centers_poly <- nightlife_centers_poly[-c(1),] #remove polys with low kde values 
+nightlife_centers_poly <- st_cast(nightlife_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
+```
+
+```{r}
+nightlife_centers_poly <- st_transform(nightlife_centers_poly, crs=st_crs(subzones)) # project to basemap's CRS
+
+# Plot of nightlife location and density polygons
+tm_shape(base_map) + tm_borders() + 
+  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde') + 
+  tm_shape(nightlife_sf) + tm_bubbles(size = 0.001, col = "black")  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Nightlife locations in Singapore",
+            title.position = c('left', 'top'))
+```
+
+```{r}
+# Filter for nightlife locations within KDE regions
+all_kde <- st_union(nightlife_centers_poly)
+nightlife_kde <- st_intersection(all_kde, nightlife_sf)
+print(length(nightlife_kde))
+print(nrow(nightlife_sf))
+print(sprintf("A total of %d nightlife locations lie in the filtered KDE regions, out of %d original nightlife locations. That means %f of nightlife locations lie in the filtered KDE regions.", length(nightlife_kde), nrow(nightlife_sf), length(nightlife_kde)/nrow(nightlife_sf)))
+```
+```{r}
+
+# Combine polygons by KDE class and find its intersection with restaurants
+grouped_union <- nightlife_centers_poly %>%
+  group_by(kde) %>%
+  summarise(geometry = st_union(geometry))
+
+nightlife_intersection <- st_intersection(grouped_union, nightlife_sf)
+
+kde_nightlife_count <- nightlife_intersection %>%
+  group_by(kde) %>%
+  summarise(nightlife_count = n())
+
+print(kde_nightlife_count)
+
+# Combine polygons by KDE class and find its intersection with restaurants
+restaurant_intersection <- st_intersection(grouped_union, non_midnight_restaurants)
+midnight_restaurant_intersection <- st_intersection(grouped_union, midnight_restaurants)
+
+kde_restaurant_count <- restaurant_intersection %>%
+  group_by(kde) %>%
+  summarise(restaurant_count = n())
+
+# View the result
+print(kde_restaurant_count)
+```
+
+```{r}
+# Plot of all non-midnight restaurants within the extracted polygons
+tm_shape(intersection_result) +
+  tm_bubbles(size = 0.1, col = "kde") +
+  tm_shape(midnight_intersection_result) +
+  tm_bubbles(size = 0.1, col = "black") +
+  tm_layout(legend.show = TRUE)
+```
