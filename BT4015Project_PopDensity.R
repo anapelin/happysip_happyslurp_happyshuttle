@@ -28,11 +28,17 @@ library(psych)
 library(spatstat)
 library(spdep)
 library(jsonlite)
+library(gstat)
+
 
 # 2. Handling Data
 # 2.1 Loading Raw Datafiles
 # Base Map
+subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
+base_map <- st_transform(border, crs=st_crs(subzones))
 base_map <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+
 
 # Population + HDB Data
 data <- read.csv("dataset/filteredSG_population_density.csv")
@@ -145,8 +151,8 @@ table(data$youth)
 table(data$gen)
 
 #dispersion standard distance deviation #TIME TAKEN is about 15min
-sdd <- sqrt(with(ppp_data, sum((x - mean_center[1])^2 + (y - mean_center[2])^2) / length(x)))
-print(sdd)
+# sdd <- sqrt(with(ppp_data, sum((x - mean_center[1])^2 + (y - mean_center[2])^2) / length(x)))
+# print(sdd)
 
 #Explore Point of Interest (POI) data
 # bar_club <- poi %>% filter(bar == "True" | night_club == "True")
@@ -184,13 +190,124 @@ ggplot() +
   labs(title = "Overlay of Polygon and Point Plot") +  theme_void()
 
 #This plot is to show how some HDB lies outside the given density polys.
-#interesting to note that condos are not represented, shall we exclude them from analysis?
+#HDB with youth polygons
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(yth_poly) + tm_polygons(col = 'youth') + 
+  tm_shape(hdb_spatial) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="HDB location in Singapore",
+            title.position = c('left', 'bottom'))
 
-#Handling NAs and duplicates
-yth_mean <- mean(joined$youth, na.rm = T)
-joined <- joined %>% mutate(youth = ifelse(is.na(youth), yth_mean, youth)) #replace NAs with mean
-joined <- joined %>% group_by(addr) %>% summarise(addr = addr, youth = mean(youth), geometry = geometry) #for rows with multiple densities, replace with mean of duplicates.
-joined <- unique(joined)
+#Interpolation to fill in missing data
+
+#First, we need to seperate out data with NA values and only interpolate on coordinates with points
+
+joined_noNA <- joined %>% filter(!is.na(youth))
+
+joined_spatial <- as(joined_noNA, "Spatial")
+
+#Creating a raster layer for interpolation
+grd              <- as.data.frame(spsample(joined_spatial, "regular", n=10000))
+names(grd)       <- c("lat", "lng")
+coordinates(grd) <- c("lat", "lng")
+gridded(grd)     <- TRUE
+fullgrid(grd)    <- TRUE
+
+crs(grd) <- crs(joined_spatial)
+plot(grd)
+yth.idw <- gstat::idw(youth ~ 1, joined_spatial, newdata=grd, idp=3.0) #idp of 3 chosen as we want closer values to mean more
+
+r_hdb_idw       <- raster(yth.idw)
+
+
+#Raster plot with idw values 
+tm_shape(r_hdb_idw) + 
+  tm_raster(n=10,palette = "Blues", stretch.palette = FALSE,title="Predicted youth density") + 
+  tm_shape(joined_spatial) + tm_dots(size=0.005) +
+  tm_legend(legend.outside=TRUE)
+
+#EDA on youth density, making a histogram of youth densities
+yth_hist <- r_hdb_idw@data@values
+
+ggplot(data.frame(values = yth_hist), aes(x = values)) +
+  geom_histogram(binwidth = 0.1, fill = "lightblue", color = "black", aes(y = ..count..)) +
+  ggtitle("Histogram of Youth Densities (%)") +
+  xlab("Youth Density (%)") +
+  ylab("Frequency") + theme_minimal()
+
+#A couple of statistics for youth density
+mean(yth_hist)
+median(yth_hist)
+quantile(yth_hist,0.25)
+quantile(yth_hist,0.75)
+max(yth_hist)
+
+
+
+#Before we move on, we realise that with spatial interpolation, the assigning of values will take a really long time
+#As such, we reclassify the values into groups before converting them nto polygons for analysis
+
+reclass_value_idw <- c(0,0.25,0) #to reclass values into 25 different bins
+for (i in seq(0,24,1)) {
+  reclass_value_idw[3*i + 4] = 0.25 + 0.5*i
+  reclass_value_idw[3*i + 5] = 0.75 + 0.5*i
+  reclass_value_idw[3*i + 6] = 0.5 + 0.5*i
+}
+
+reclass_r_hdb_idw <- reclassify(as(r_hdb_idw, "RasterLayer"), reclass_value_idw) #reclassify kde values to groups
+
+
+#Converting raster layer into polygons to view overlay over Singapore
+threshold <- quantile(yth_hist,0.5) #define a threshold to determine what values of youth density we drop
+hdb_idw <- rasterToPolygons(reclass_r_hdb_idw, fun = function(x) {x > threshold},dissolve = TRUE) #
+hdb_idw <- st_as_sf(hdb_idw)
+hdb_idw <- hdb_idw %>% rename(youth = var1.pred)
+hdb_idw <- st_cast(hdb_idw,'MULTIPOLYGON')
+st_crs(hdb_idw) <- st_crs("EPSG:4326") #set crs for new polygons
+
+#overlaid raster plot with polygon plot (looks weird as every square has an individual value) 
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(hdb_idw) + tm_polygons(col = 'youth', palette = 'Blues') + 
+  tm_shape(hdb_spatial) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="HDB location in Singapore",
+            title.position = c('left', 'bottom'))
+
+
+#assigning each hdb a youth value by intersecting the multipolygons to with all hdbs
+hdb_yth_pts <- st_intersection(hdb_spatial, hdb_idw)
+
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(hdb_idw) + tm_polygons(col = 'youth', palette = 'Blues') + 
+  tm_shape(hdb_yth_pts) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="HDB location in Singapore",
+            title.position = c('left', 'bottom'))
+
+
+#Handling NAs and duplicates #deprecated as NAs and duplicates were handled with interpolation
+# yth_mean <- mean(joined$youth, na.rm = T)
+# joined <- joined %>% mutate(youth = ifelse(is.na(youth), yth_mean, youth)) #replace NAs with mean
+# joined <- joined %>% group_by(addr) %>% summarise(addr = addr, youth = mean(youth), geometry = geometry) #for rows with multiple densities, replace with mean of duplicates.
+# joined <- unique(joined)
 
 
 #Plot with handled dataset
@@ -246,25 +363,9 @@ ggplot() +
 # plot(kde)
 
 
-#Lets try here
-
-#HDB with youth polygons
-tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
-  tm_shape(yth_poly) + tm_polygons(col = 'youth') + 
-  tm_shape(hdb_spatial) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  +
-  tm_compass(type="8star", size = 2) +
-  tm_scale_bar(width = 0.15) +
-  tm_layout(legend.format = list(digits = 0),
-            legend.position = c("left", "bottom"),
-            legend.text.size = 0.25, 
-            legend.title.size = 0.5,
-            title="HDB location in Singapore",
-            title.position = c('left', 'bottom'))
-
 #KDE plot
 
-hdb_points <- as(joined, "Spatial")
+hdb_points <- as(hdb_yth_pts, "Spatial")
 hdb_centers <- kde.points(hdb_points, h = 0.013) #1.4km bandwidth 
 hdb_centers_sf <- st_as_sf(hdb_centers)
 
@@ -272,12 +373,12 @@ plot(hdb_centers)
 tm_shape(hdb_centers) + tm_raster()
 
 #Reclassify values in raster to make contour lines as seen in KDE plot.
-reclass_values <- c(0,50,1, #reclassify kde values from 0-50 in group 1 and so on
-                    50,100,2,
-                    100,150,3,
-                    150,200,4,
-                    200,250,5,
-                    250,300,6)
+reclass_values <- c(0,100,1, #reclassify kde values from 0-50 in group 1 and so on
+                    100,200,2,
+                    200,300,3,
+                    300,400,4,
+                    400,500,5,
+                    500,600,6)
 
 reclass_hdb_centers <- reclassify(as(hdb_centers, "RasterLayer"), reclass_values) #reclassify kde values to groups
 hdb_centers_poly <- rasterToPolygons(reclass_hdb_centers, dissolve = T) #to make a polygon layer
@@ -356,10 +457,27 @@ closest_busstops_buffer <- st_union(closest_busstops_buffer) #join the buffers t
 closest_busstops_buffer <- st_cast(closest_busstops_buffer,'POLYGON') #join the buffers together
 closest_busstops_buffer <- st_make_valid(closest_busstops_buffer)
 
+#Busstop buffers with ALL HDBs
 tm_shape(base_map) + tm_borders() + 
   tm_basemap('OpenStreetMap') + 
   tm_shape(closest_busstops_buffer) + tm_polygons() + 
   tm_shape(hdb_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legnd.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Central busstop buffers in\n Singapore  with  HDBs",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+
+#Busstop buffers with Filtered HDBs
+tm_shape(base_map) + tm_borders() + 
+  tm_basemap('OpenStreetMap') + 
+  tm_shape(closest_busstops_buffer) + tm_polygons() + 
+  tm_shape(hdb_yth_pts) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) +
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
@@ -373,9 +491,23 @@ tm_shape(base_map) + tm_borders() +
 num_hdb_captured <- nrow(st_intersection(hdb_spatial, closest_busstops_buffer))
 percentage_captured <- num_hdb_captured / nrow(hdb_spatial)
 print(percentage_captured)
-#1km radius: 68% HDB captured #not valid because need to change bandwidth
-#1.5km radius: 84% HDB captured
-#2km radius: 94% HDB captured #not valid because need to change bandwidth
+#1.5km radius: 47.8% HDB captured for all HDBs
+
+
+num_hdb_captured <- nrow(st_intersection(hdb_yth_pts, closest_busstops_buffer))
+percentage_captured <- num_hdb_captured / nrow(hdb_yth_pts)
+print(percentage_captured)
+#1.5km radius: 98.7% HDB captured for filtered HDBs
+
+closest_busstops
+
+class(base_map)
+
+combined_base_map <- base_map %>%
+  group_by(REGION_N) %>%
+  summarise(geometry = st_combine(geometry))
+
+#st_intersection(closest_busstops,combined_base_map)
 
 
 #Onto finding ideal busstops for nightlife
