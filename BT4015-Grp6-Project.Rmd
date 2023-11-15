@@ -189,24 +189,26 @@ tm_shape(central_plg) + tm_borders(col='black') +
 nightlife_ppp <- as.ppp(nightlife_filtered_sf)
 marks(nightlife_ppp) <- "nightlife"
 restaurants_ppp <- as.ppp(restaurant_filtered_sf)
-marks(restaurants_ppp) <- "latenight restaurants"
+marks(restaurants_ppp) <- "restaurants"
+latenight_restaurants_ppp <- as.ppp(midnight_restaurant_filtered_sf)
+marks(latenight_restaurants_ppp) <- "latenight restaurants"
 P <- superimpose(nightlife_ppp, restaurants_ppp)
-# hypothesis testing for the 1
+
+# hypothesis testing for the distribution of nightlife and latenight restaurants
 nn.sim = vector()
 P.r = P
 for(i in 1:999){
   marks(P.r) = sample(P$marks)  # Reassign labels at random, point locations don't change
   nn.sim[i] = mean(nncross(P.r[P.r$marks == "nightlife", ] ,P.r[P.r$marks == "latenight restaurants", ])$dist)
 }
-hist(nn.sim,breaks=30, xlim=c(0,140))
-abline(v=mean(nncross(P[P$marks == "nightlife", ] ,P[P$marks == "latenight restaurants", ])$dist),col="red")
+hist(nn.sim,breaks=30, xlim=c(0,300))
+abline(v=mean(nncross(nightlife_ppp,restaurants_ppp)$dist),col="red")
 
-# Compute empirical cumulative distribution
-nn.sim.ecdf = ecdf(nn.sim)
 
-# See how the original stat compares to the simulated distribution
-nn.sim.ecdf(mean(nncross(P[P$marks == "nightlife", ] ,P[P$marks == "latenight restaurants", ])$dist)) 
+
+nncross(restaurants_ppp,nightlife_ppp,k=1:3)
+
 
 ```
 
-As the p-value is 0, we  strong evidence that the observed data is unlikely to have occured by random chance
+As the p-value is 0, we  strong evidence that the observed distribution of nightlife locations and late-night restaurants is unlikely to have occured by random chance
