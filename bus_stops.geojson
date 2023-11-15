@@ -1,0 +1,24 @@
+{
+"type": "FeatureCollection",
+"name": "bus_stops",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "BusStopCode": "76189", "RoadName": "Tampines St 23", "Description": "Opp Blk 216", "kde": 3.0, "Region": "EAST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.952796111025762, 1.3537000000187 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "75139", "RoadName": "Tampines Ave 5", "Description": "Blk 863", "kde": 4.0, "Region": "EAST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.936125037566413, 1.35563964372785 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "46561", "RoadName": "Woodlands St 13", "Description": "Opp Blk 178", "kde": 3.0, "Region": "NORTH REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.777244, 1.434717 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "46769", "RoadName": "Woodlands Ave 7", "Description": "Blk 666", "kde": 4.0, "Region": "NORTH REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.79735798460473, 1.439351033794541 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "67481", "RoadName": "Sengkang West Ave", "Description": "Fernvale Stn/Blk 439A", "kde": 3.0, "Region": "NORTH-EAST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.877645865180838, 1.39149794105559 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "67259", "RoadName": "Compassvale St", "Description": "Compassvale Stn Exit B", "kde": 4.0, "Region": "NORTH-EAST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.900462389005853, 1.39465386086721 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "65069", "RoadName": "Punggol Rd", "Description": "Blk 190C", "kde": 4.0, "Region": "NORTH-EAST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.902368248585333, 1.39504382175966 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "65241", "RoadName": "Edgefield Plains", "Description": "Blk 196C", "kde": 5.0, "Region": "NORTH-EAST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.907671722097859, 1.39917246521216 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "22351", "RoadName": "Jurong West Ave 4", "Description": "Opp Blk 717", "kde": 4.0, "Region": "WEST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.698033828847358, 1.34277421893699 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "43391", "RoadName": "Bt Batok Ctrl", "Description": "Bt Batok CC", "kde": 3.0, "Region": "WEST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.747797536647298, 1.34989395166691 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "28391", "RoadName": "Jurong West St 51", "Description": "Blk 501", "kde": 3.0, "Region": "WEST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.719371659719826, 1.349780932370851 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "43841", "RoadName": "Bt Batok St 33", "Description": "Blk 324", "kde": 3.0, "Region": "WEST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.747522777969053, 1.3619538889938 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "44459", "RoadName": "Choa Chu Kang Way", "Description": "Opp South View Stn", "kde": 4.0, "Region": "WEST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.744545624351218, 1.380287314315291 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "44609", "RoadName": "Saujana Rd", "Description": "Blk 408", "kde": 3.0, "Region": "WEST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.768170863672481, 1.382014552387161 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "45321", "RoadName": "Choa Chu Kang Dr", "Description": "Yew Tee Stn", "kde": 3.0, "Region": "WEST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.747554890704833, 1.39740269682477 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "44571", "RoadName": "Choa Chu Kang Ave 2", "Description": "Blk 297D", "kde": 4.0, "Region": "WEST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.743166669523049, 1.37836352141036 ] } },
+{ "type": "Feature", "properties": { "BusStopCode": "44779", "RoadName": "Fajar Rd", "Description": "Opp Fajar Stn", "kde": 4.0, "Region": "WEST REGION" }, "geometry": { "type": "Point", "coordinates": [ 103.77020678944983, 1.38422184036636 ] } }
+]
+}
