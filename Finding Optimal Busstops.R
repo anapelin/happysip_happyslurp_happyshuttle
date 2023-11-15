@@ -35,10 +35,14 @@ library(gstat)
 # 2.1 Loading Raw Datafiles
 # Base Map
 subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
-# base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
-# base_map <- base_map %>% select(ISO)
-# base_map <- st_transform(base_map, crs=st_crs(subzones))
-base_map <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
+base_map <- base_map %>% select(ISO)
+base_map <- st_transform(base_map, crs=st_crs(subzones))
+# base_map <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+base_map <- st_make_valid(base_map)
+
+tmap_mode('view')
+
 
 # Population + HDB Data
 data <- read.csv("dataset/filteredSG_population_density.csv")
@@ -153,16 +157,19 @@ table(data$gen)
 yth_spatial <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
 
 #Plot the points to visualise how the values look #plot takes a while to load
-tm_shape(base_map) + tm_borders() + 
+yth_spatial_map <- tm_shape(base_map) + tm_borders() + 
   tm_shape(yth_spatial) + tm_bubbles(size = 0.05, col = 'youth', border.alpha = 0)  +
   tm_compass(type="8star", size = 2) +
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
-            legend.position = c("left", "bottom"),
+            legend.position = c("left", "top"),
             legend.text.size = 0.25, 
             legend.title.size = 0.5,
-            title="HDB location in Singapore",
-            title.position = c('left', 'bottom'))
+            title="Youth densities (%) in Singapore",
+            title.position = c('left', 'top'))
+yth_spatial_map
+
+tmap_save(yth_spatial_map, filename = "plots/optimal_stops/yth_spatial_map.png")
 
 #We notice that a lot of the same values are congregated together, so lets make them into polygon
 #Group points with the same value and create convex hulls
@@ -179,6 +186,20 @@ yth_poly <- yth_poly[-14,] #remove the individual point which is out of place
 hdb_spatial <- st_as_sf(hdb, coords = c("lng", "lat"), crs = 4326)
 joined <- st_join(hdb_spatial,yth_poly) #combine the HDB data with the youth density to assign youth density values to each HDB
 
+#HDB point graph
+tm_shape(base_map) + tm_borders() + 
+  tm_shape(hdb_spatial) + tm_dots(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.75, 
+            legend.title.size = 1.5,
+            title="HDB locations within Singapore",
+            title.size = 2,
+            title.position = c('left', 'top'))
+
+
 #I tried to plot both points and poly tgthr, looks OK 
 ggplot() +
   geom_sf(data = yth_poly, aes(fill = youth), color = "black") +
@@ -189,17 +210,19 @@ ggplot() +
 
 #This plot is to show how some HDB lies outside the given density polys.
 #HDB with youth polygons
+
 tm_shape(base_map) + tm_borders() + 
-  tm_shape(yth_poly) + tm_polygons(col = 'youth') + 
-  tm_shape(hdb_spatial) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_shape(yth_poly) + tm_polygons(col = 'youth', title = 'Youth Density') + 
+  tm_shape(hdb_spatial) + tm_dots(size = 0.05, scale = 0.2, col = 'black')  +
   tm_compass(type="8star", size = 2) +
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
-            legend.text.size = 0.25, 
-            legend.title.size = 0.5,
-            title="HDB location in Singapore",
-            title.position = c('left', 'bottom'))
+            legend.text.size = 0.75, 
+            legend.title.size = 1.5,
+            title="HDB locations within Singapore",
+            title.size = 2,
+            title.position = c('left', 'top'))
 
 
 
@@ -225,8 +248,9 @@ r_hdb_idw       <- raster(yth.idw)
 
 
 #Raster plot with idw values 
+tm_shape(base_map) + tm_borders() + 
 tm_shape(r_hdb_idw) + 
-  tm_raster(n=10,palette = "Blues", stretch.palette = FALSE,title="Predicted youth density") + 
+  tm_raster(n=10,palette = "Blues", stretch.palette = FALSE,title="Predicted Youth Density (%)") + 
   tm_shape(joined_spatial) + tm_dots(size=0.005) +
   tm_legend(legend.outside=TRUE)
 
@@ -271,7 +295,6 @@ st_crs(hdb_idw) <- st_crs("EPSG:4326") #set crs for new polygons
 
 #overlaid raster plot with polygon plot (looks weird as every square has an individual value) 
 tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
   tm_shape(hdb_idw) + tm_polygons(col = 'youth', palette = 'Blues') + 
   tm_shape(hdb_spatial) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  + #plot with all hdb points
   tm_compass(type="8star", size = 2) +
@@ -288,7 +311,6 @@ tm_shape(base_map) + tm_borders() +
 hdb_yth_pts <- st_intersection(hdb_spatial, hdb_idw)
 
 tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
   tm_shape(hdb_idw) + tm_polygons(col = 'youth', palette = 'Blues') + 
   tm_shape(hdb_yth_pts) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  + #plot with only hdbs points inside the filter
   tm_compass(type="8star", size = 2) +
@@ -297,7 +319,7 @@ tm_shape(base_map) + tm_borders() +
             legend.position = c("left", "bottom"),
             legend.text.size = 0.25, 
             legend.title.size = 0.5,
-            title="HDB location in Singapore",
+            title="Filtered HDB locations in Singapore",
             title.position = c('left', 'bottom'))
 
 
@@ -317,39 +339,6 @@ ggplot() +
   scale_fill_gradient(name = 'Density polys', low = "blue", high = "green") +
   labs(title = "Overlay of Polygon and Point Plot") +  theme_void()
 
-
-
-# K-nearest neighbors (KNN) method: # Perform Moran's I test
-# w <- knn2nb(knearneigh(coordinates(data), k = 5))  # Adjust 'k' as needed
-# w_listw <- nb2listw(w)
-
-#*W output
-#*Neighbour list object:
-#*Number of regions: 217054  
-#*Number of nonzero links: 1085270 
-#*Percentage nonzero weights: 0.002303574 
-#*Average number of links: 5 
-
-# 
-# moran_test <- moran.test(x = data$youth, listw = w_listw)
-# print(moran_test)
-# #* output is p-value of < 2.2e-16
-# #* Moran I statistic       Expectation          Variance 
-# #* 9.974184e-01     -4.607170e-06      1.693194e-06
-# 
-# 
-# #Kernel Density estimation
-# ppp_data <- ppp(
-#   data$longitude,
-#   data$latitude,
-#   window = owin(range(data$longitude), range(data$latitude))
-# )
-# 
-# # Perform kernel density estimation
-# kde <- density(ppp_data)
-# plot(kde)
-
-
 #KDE plot
 
 hdb_points <- as(hdb_yth_pts, "Spatial")
@@ -357,7 +346,8 @@ hdb_centers <- kde.points(hdb_points, h = 0.013) #1.4km bandwidth
 hdb_centers_sf <- st_as_sf(hdb_centers)
 
 plot(hdb_centers) 
-tm_shape(hdb_centers) + tm_raster()
+
+tmap_mode('view')
 
 #Reclassify values in raster to make contour lines as seen in KDE plot.
 reclass_values <- c(0,100,1, #reclassify kde values from 0-50 in group 1 and so on
@@ -375,28 +365,26 @@ hdb_centers_poly <- st_cast(hdb_centers_poly,'POLYGON') #to split multipolygon t
 
 #map to show how the kde looks like with all hdbs
 tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
-  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
-  tm_shape(hdb_yth_pts) + tm_bubbles(size = 0.005, scale = 0.5)  +
+  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde', title = 'kde group') + tm_borders() +
+  tm_shape(hdb_yth_pts) + tm_bubbles(size = 0.5, scale = 0.2, border.alpha = 0, alpha = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
             legend.text.size = 0.5, 
             legend.title.size = 1,
-            title="HDB location in Singapore",
+            title="KDE of HDB Locations in Singapore",
             title.position = c('left', 'top'))
 
 #Map to show how bustops fare with kdes
 tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
-  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
+  #tm_shape(hdb_centers_poly) + tm_fill(col = 'kde', title = 'kde group') + tm_borders() +
   tm_shape(bus_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
             legend.text.size = 0.5, 
             legend.title.size = 1,
-            title="Busstop location in Singapore \n with KDE of HDBs",
+            title="Busstop locations in Singapore",
             title.size = 1,
             title.position = c('left', 'top'))
 
@@ -405,15 +393,14 @@ bus_inside_spatial <- st_intersection(bus_spatial, hdb_centers_poly)
 
 #Show busstops which are inside the KDEs
 tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
-  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
-  tm_shape(bus_inside_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
+  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde', title = 'kde group') + tm_borders() +
+  tm_shape(bus_inside_spatial) + tm_bubbles(size = 0.05, scale = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
             legend.text.size = 0.5, 
             legend.title.size = 1,
-            title="Busstop location in Singapore \n with KDE of HDBs",
+            title="Busstop locations in Singapore with KDEs",
             title.size = 1,
             title.position = c('left', 'top'))
 
@@ -426,15 +413,14 @@ closest_busstops <- bus_inside_spatial[closest_busstops_index,]
 
 #busstops 
 tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
-  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
+  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde', title = 'kde group') + tm_borders() +
   tm_shape(closest_busstops) + tm_bubbles(size = 0.2, scale = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
             legend.text.size = 0.5, 
             legend.title.size = 1,
-            title="Central busstop location in Singapore \n with KDE of HDBs",
+            title="Central busstop locations in Singapore with KDEs",
             title.size = 1,
             title.position = c('left', 'top'))
 
@@ -446,8 +432,7 @@ closest_busstops_buffer <- st_make_valid(closest_busstops_buffer)
 
 #Busstop buffers with ALL HDBs
 tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
-  tm_shape(closest_busstops_buffer) + tm_polygons() + 
+  #tm_shape(closest_busstops_buffer) + tm_polygons() + 
   tm_shape(hdb_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) +
   tm_scale_bar(width = 0.15) +
@@ -455,14 +440,13 @@ tm_shape(base_map) + tm_borders() +
             legend.position = c("left", "bottom"),
             legend.text.size = 0.5, 
             legend.title.size = 1,
-            title="Central busstop buffers in\n Singapore  with  HDBs",
+            title="HDBs in Singapore",
             title.size = 1,
             title.position = c('left', 'top'))
 
 
 #Busstop buffers with Filtered HDBs
 tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
   tm_shape(closest_busstops_buffer) + tm_polygons() + 
   tm_shape(hdb_yth_pts) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) +
@@ -471,7 +455,7 @@ tm_shape(base_map) + tm_borders() +
             legend.position = c("left", "bottom"),
             legend.text.size = 0.5, 
             legend.title.size = 1,
-            title="Central busstop buffers in\n Singapore  with  HDBs",
+            title="Central busstop buffer  with  filtered HDBs",
             title.size = 1,
             title.position = c('left', 'top'))
 
@@ -488,7 +472,7 @@ print(percentage_captured)
 
 #Now we want to add the region attribute to each datapoint for each busstop for later
 #First extract out the polygons with the regions only
-combined_base_map <- base_map %>%
+combined_base_map <- subzones %>%
   group_by(REGION_N) %>%
   summarise(geometry = st_combine(geometry)) 
 combined_base_map <- st_transform(combined_base_map, crs = 4326)
@@ -519,7 +503,6 @@ reclass_values_2 <- c(0,max(nightlife_centers$kde) / 7,1, #reclassify kde values
                       4* max(nightlife_centers$kde) / 7,5 * max(nightlife_centers$kde) / 7,5,
                       5* max(nightlife_centers$kde) / 7,6 * max(nightlife_centers$kde) / 7,6,
                       6* max(nightlife_centers$kde) / 7,max(nightlife_centers$kde),7)
-?rasterToPolygons
 
 reclass_nightlife_centers <- reclassify(as(nightlife_centers, "RasterLayer"), reclass_values_2) #reclassify kde values to groups
 nightlife_centers_poly <- rasterToPolygons(reclass_nightlife_centers, dissolve = T, digits = 6) #to make a polygon layer
@@ -528,19 +511,18 @@ nightlife_centers_poly <- nightlife_centers_poly[-c(1,2),] #remove polys with lo
 nightlife_centers_poly <- st_cast(nightlife_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
 
 #Central area of SG
-central_area <- base_map %>% filter(PLN_AREA_N %in% c('DOWNTOWN CORE', 'BUKIT MERAH', 'SINGAPORE RIVER', 'MUSEUM', 'RIVER VALLEY', 'ORCHARD','NEWTON','ROCHOR','TANGLIN', 'KALLANG'))
+central_area <- subzones #%>% filter(PLN_AREA_N %in% c('DOWNTOWN CORE', 'BUKIT MERAH', 'SINGAPORE RIVER', 'MUSEUM', 'RIVER VALLEY', 'ORCHARD','NEWTON','ROCHOR','TANGLIN', 'KALLANG'))
 
 #map to show how the kde looks like with all nightlife spots
-tm_shape(central_area) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
-  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
-  tm_shape(nightlife) + tm_bubbles(size = 0.01, col = "black")  +
+tm_shape(base_map) + tm_borders() + 
+  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde', title = 'kde group') + tm_borders() +
+  tm_shape(nightlife) + tm_bubbles(size = 0.001, col = "black")  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
             legend.text.size = 0.5, 
             legend.title.size = 1,
-            title="Nightlife locations in Singapore",
+            title="KDE of Nightlife locations in Singapore",
             title.position = c('left', 'top'))
 
 #get the centroids of each polygon
@@ -550,10 +532,9 @@ nightlife_centers_points <- st_transform(nightlife_centers_points, crs = 4326)
 closest_nightlife_busstops_index <- st_nearest_feature(nightlife_centers_points, bus_spatial)
 closest_nightlife_busstops <- bus_spatial[closest_nightlife_busstops_index,]
 
-tm_shape(central_area) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
-  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
-  tm_shape(nightlife_centers_points) + tm_bubbles(size = 0.05, col = "black")  +
+tm_shape(base_map) + tm_borders() + 
+  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde', title = 'kde group') + tm_borders() +
+  tm_shape(nightlife_centers_points) + tm_bubbles(size = 0.005, col = "black")  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
@@ -562,10 +543,9 @@ tm_shape(central_area) + tm_borders() +
             title="Nightlife locations centers in Singapore",
             title.position = c('left', 'top'))
 
-tm_shape(central_area) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
-  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
-  tm_shape(closest_nightlife_busstops) + tm_bubbles(size = 0.05, col = "black")  +
+tm_shape(base_map) + tm_borders() + 
+  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde', title = 'kde group') + tm_borders() +
+  tm_shape(closest_nightlife_busstops) + tm_bubbles(size = 0.005, col = "black")  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
@@ -580,10 +560,9 @@ closest_nightlife_busstops_buffer <- st_cast(closest_nightlife_busstops_buffer,'
 closest_nightlife_busstops_buffer <- st_make_valid(closest_nightlife_busstops_buffer)
 
 #map to show how the kde looks like with all nightlife spots
-tm_shape(central_area) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
+tm_shape(base_map) + tm_borders() + 
   tm_shape(closest_nightlife_busstops_buffer) + tm_fill(col = 'yellow') + tm_borders() +
-  tm_shape(nightlife) + tm_bubbles(size = 0.025, col = "black")  +
+  tm_shape(nightlife) + tm_bubbles(size = 0.005, col = "black")  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
