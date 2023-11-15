@@ -411,6 +411,19 @@ hdb_centers_points <- st_centroid(hdb_centers_poly)
 closest_busstops_index <- st_nearest_feature(hdb_centers_points, bus_inside_spatial)
 closest_busstops <- bus_inside_spatial[closest_busstops_index,]
 
+#HDB Centroids
+tm_shape(base_map) + tm_borders() + 
+  tm_shape(hdb_centers_poly) + tm_fill(col = 'kde', title = 'kde group') + tm_borders() +
+  tm_shape(hdb_centers_points) + tm_bubbles(size = 0.2, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Central busstop locations in Singapore with KDEs",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
 #busstops 
 tm_shape(base_map) + tm_borders() + 
   tm_shape(hdb_centers_poly) + tm_fill(col = 'kde', title = 'kde group') + tm_borders() +
