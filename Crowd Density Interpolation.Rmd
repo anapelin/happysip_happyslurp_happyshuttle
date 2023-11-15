@@ -1,0 +1,390 @@
+---
+title: "Crowd Density Interpolation"
+output: html_document
+date: "2023-11-15"
+---
+
+```{r setup, include=FALSE}
+
+library('GISTools')
+library('raster')
+library('tmap')
+library('rgdal') 
+library('maptools') 
+library('raster') 
+library(raster)
+library(sp)
+library(sf)
+library(tidyverse)
+library(rgeos)
+library(ggplot2)
+library(psych)
+library(spatstat)
+library(spdep)
+library(jsonlite)
+library(gstat)
+library(magick)
+
+
+```
+
+## Base Layer
+
+```{r base}
+subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+#Central area of SG
+base_map <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+central_area <- base_map %>% filter(PLN_AREA_N %in% c('DOWNTOWN CORE', 'BUKIT MERAH', 'SINGAPORE RIVER', 'MUSEUM', 'RIVER VALLEY', 'ORCHARD','NEWTON','ROCHOR','TANGLIN', 'KALLANG','OUTRAM')) %>% filter(!SUBZONE_N %in% c( 'CITY TERMINALS','MARITIME SQUARE','ALEXANDRA HILL','TELOK BLANGAH DRIVE','DEPOT ROAD','TELOK BLANGAH WAY','TELOK BLANGAH RISE'))
+base_map <- st_transform(central_area, crs=st_crs(central_area)) 
+
+
+
+```
+
+
+## Interpolation for bars and clubs
+
+
+```{r bcr data}
+
+#Bars and Clubs dataframe
+bcr <- read_csv('dataset/besttime/processed_bars_clubs.csv')
+bcr <- na.omit(bcr)
+#Restaurants dataframe
+res <- read_csv('dataset/besttime/processed_restaurants.csv')
+res <- na.omit(res)
+res <- res %>% rename(`12am_cd` = `12pm_cd`)
+
+bcr <- bcr %>% select(lat,lon, `10pm_cd`,`11pm_cd`,`12am_cd`,`1am_cd`,`2am_cd`) %>% mutate(cat = "Bars and Clubs")
+res <- res %>% select(lat,lon, `10pm_cd`,`11pm_cd`,`12am_cd`,`1am_cd`,`2am_cd`)%>% mutate(cat = "Restaurants")
+bcr <- rbind(bcr,res)
+
+bcr$`cd_10` <- bcr$`10pm_cd`
+bcr$`cd_11` <- bcr$`11pm_cd`
+bcr$`cd_12` <- bcr$`12am_cd`
+bcr$`cd_1` <- bcr$`1am_cd`
+bcr$`cd_2` <- bcr$`2am_cd`
+
+coordinates(bcr) <- ~lon + lat
+
+
+#Tranform to spatial dataframe and see how it looks like
+plot(bcr) #notice that one point is so much further away than the rest
+bcr <- bcr[-c(10,49),] #Remove that one point for better interpolation
+plot(bcr) #Corrected plot without annoying point
+
+bcr$X <- coordinates(bcr)[,1]
+bcr$Y <- coordinates(bcr)[,2]
+
+bcr <- bcr[-zerodist(bcr)[,1],]
+
+base_spatial <- as(base_map, 'Spatial')
+
+
+bcr_spatial <- st_as_sf(bcr, coords = c("lon", "lat"))
+
+tmap_mode('plot')
+tmap_options(check.and.fix = TRUE)
+tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+  tm_shape(bcr_spatial) + tm_dots(size = 0.5, col = 'cat', palette = c('blue','green2')) + # Nightlife and Restaurants locations
+  tm_scale_bar(width = 0.15) 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Nightlife and Late Restaurants \n in Singapore",
+            title.position = c('left', 'bottom'))
+  
+
+
+```
+
+
+
+
+```{r grid}
+
+#Making the raster grid
+
+grd              <- as.data.frame(spsample(bcr, "regular", n=50000))
+names(grd)       <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd)     <- TRUE
+fullgrid(grd)    <- TRUE
+
+crs(grd) <- crs(bcr)
+
+```
+
+
+
+
+```{r interpolates}
+
+#10pm
+f.bcr <- as.formula(cd_10 ~ lon + lat) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.0025)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.025, nugget=600))
+
+# The following plot allows us to assess the fit
+vari_plot_10 <- plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.05))
+vari_plot_10
+
+
+f.bcr <- as.formula(cd_10 ~ X + Y) 
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+
+#tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+i_10 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Interpolation of Crowd Density at 10pm", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120),alpha = 0.7) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+
+#11pm
+
+f.bcr <- as.formula(cd_11 ~ lon + lat) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.0025)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.025, nugget=650))
+
+# The following plot allows us to assess the fit
+vari_plot_11 <- plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.05))
+vari_plot_11
+
+
+f.bcr <- as.formula(cd_11 ~ X + Y) 
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+
+#tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+i_11 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Interpolation of Crowd Density at 11pm", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120),alpha = 0.7) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+#12am
+
+f.bcr <- as.formula(cd_12 ~ lon + lat) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.0025)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.025, nugget=650))
+
+# The following plot allows us to assess the fit
+vari_plot_12 <- plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.05))
+vari_plot_12
+
+
+f.bcr <- as.formula(cd_12 ~ X + Y) 
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+
+#tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+i_12 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Interpolation of Crowd Density at 12am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120),alpha = 0.7) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+#1am
+
+f.bcr <- as.formula(cd_1 ~ lon + lat) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.0025)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.025, nugget=650))
+
+# The following plot allows us to assess the fit
+vari_plot_1 <- plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.05))
+vari_plot_1
+
+
+f.bcr <- as.formula(cd_1 ~ X + Y) 
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+
+#tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+i_1 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Interpolation of Crowd Density at 1am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120),alpha = 0.7) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+#2am
+
+f.bcr <- as.formula(cd_2 ~ lon + lat) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.0025)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.025, nugget=650))
+
+# The following plot allows us to assess the fit
+vari_plot_2 <- plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.05))
+vari_plot_2
+
+
+f.bcr <- as.formula(cd_2 ~ X + Y) 
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+
+#tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+i_2 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Interpolation of Crowd Density at 1am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120),alpha = 0.7) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+
+
+
+
+```
+
+
+```{r 2bcr}
+
+f.bcr <- as.formula(cd_2 ~ 1) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.001)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.015, nugget=300))
+
+# The following plot allows us to assess the fit
+plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.06))
+
+
+
+f.bcr <- as.formula(cd_2 ~ 1) 
+
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+# r.m <- mask(r, W)
+
+tm_shape(r) + 
+  tm_raster(n=10, stretch.palette=FALSE, 
+            title="Predicted Crowd Density at 2am", palette = 'RdBu', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120), midpoint = 0) +
+  tm_shape(bcr) + tm_dots(size=0.05, col = 'cd_2', palette = 'RdBu', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120), midpoint = 0) +
+  tm_legend(legend.outside=TRUE)
+
+```
+
+
+
+
+```{r trends}
+
+#install.packages('magick')
+
+f.bcr <- as.formula(cd_10 ~ X + Y) 
+
+lm.1 <- lm(f.bcr, data = bcr)
+
+dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+r   <- raster(dat.1st)
+
+l_1 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Linear Trend of Crowd Density at 10pm", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+
+f.bcr <- as.formula(cd_11 ~ X + Y) 
+
+lm.1 <- lm(f.bcr, data = bcr)
+
+dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+r   <- raster(dat.1st)
+
+l_2 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Linear Trend of Crowd Density at 11pm", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+
+f.bcr <- as.formula(cd_12 ~ X + Y) 
+
+lm.1 <- lm(f.bcr, data = bcr)
+
+dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+r   <- raster(dat.1st)
+
+l_3 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Linear Trend of Crowd Density at 12am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+f.bcr <- as.formula(cd_1 ~ X + Y) 
+
+lm.1 <- lm(f.bcr, data = bcr)
+
+dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+r   <- raster(dat.1st)
+
+l_4 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Linear Trend of Crowd Density at 1am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+f.bcr <- as.formula(cd_2 ~ X + Y) 
+
+lm.1 <- lm(f.bcr, data = bcr)
+
+dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+r   <- raster(dat.1st)
+
+l_5 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Linear Trend of Crowd Density at 2am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+
+```
+
+
+```{r trend animations}
+
+
+tmap_save(l_1, filename = "plots/crowd_density/linear trend at 10pm.png")
+tmap_save(l_2, filename = "plots/crowd_density/linear trend at 11pm.png")
+tmap_save(l_3, filename = "plots/crowd_density/linear trend at 12am.png")
+tmap_save(l_4, filename = "plots/crowd_density/linear trend at 1am.png")
+tmap_save(l_5, filename = "plots/crowd_density/linear trend at 2am.png")
+
+img_list <- image_read(c("plots/crowd_density/linear trend at 10pm.png","plots/crowd_density/linear trend at 11pm.png","plots/crowd_density/linear trend at 12am.png","plots/crowd_density/linear trend at 1am.png","plots/crowd_density/linear trend at 2am.png"))
+animation <- image_animate(img_list, fps = 1)  # Adjust fps as needed
+image_write(animation, path = "plots/crowd_density/linear trends.gif")
+
+
+```
+
+
