@@ -152,7 +152,20 @@ table(data$gen)
 #Youth polygon
 yth_spatial <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
 
-# Group points with the same value and create convex hulls
+#Plot the points to visualise how the values look #plot takes a while to load
+tm_shape(base_map) + tm_borders() + 
+  tm_shape(yth_spatial) + tm_bubbles(size = 0.05, col = 'youth', border.alpha = 0)  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="HDB location in Singapore",
+            title.position = c('left', 'bottom'))
+
+#We notice that a lot of the same values are congregated together, so lets make them into polygon
+#Group points with the same value and create convex hulls
 grouped_points <- yth_spatial %>%
   group_by(youth) %>%
   summarize()
