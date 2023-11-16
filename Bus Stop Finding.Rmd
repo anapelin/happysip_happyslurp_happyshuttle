@@ -1,0 +1,486 @@
+---
+title: "Bus Stop Finding"
+output: html_document
+date: "2023-11-16"
+---
+
+```{r setup, include=FALSE}
+
+library('GISTools')
+library('raster')
+library('tmap')
+library('rgdal') 
+library('maptools') 
+library('raster') 
+library(raster)
+library(sp)
+library(sf)
+library(tidyverse)
+library(rgeos)
+library(ggplot2)
+library(psych)
+library(spatstat)
+library(spdep)
+library(jsonlite)
+library(gstat)
+library(magick)
+
+
+```
+
+
+## Creating base layer map
+
+Here we also set the crs to WGS84 as it causes calculation later to be simple as other data is left as lat lon coordinated.
+
+
+```{r base}
+
+#If we do not want the subzone lines
+subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+base_map_no_border <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
+base_map_no_border <- base_map_no_border %>% select(ISO)
+base_map_no_border <- st_transform(base_map_no_border, crs=4326)
+
+#If we want the subzone lines
+base_map <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+base_map <- st_transform(base_map, crs=4326)
+base_map <- st_make_valid(base_map)
+
+```
+
+
+## Loading data
+
+In this file, we will be loading 4 main datasets:
+- Youth density
+- HDB locations
+- Bus Stop locations
+- Nightlife Locations
+
+
+```{r load}
+
+#Youth density
+yth_data <- read.csv("dataset/filteredSG_population_density.csv") %>% select(longitude, latitude, youth)
+yth_spatial <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
+
+
+#HDB Locations
+hdb <- read.csv("dataset/hdb.csv") %>% mutate(addr = paste(blk_no,street)) %>% select(addr,lat,lng)
+hdb_spatial <- st_as_sf(hdb, coords = c("lng", "lat"), crs = 4326)
+
+
+#Read & Load Bus Stop Data
+bus_data <- data.frame()
+for(i in 0:10) {
+  file_name <- paste0("dataset/busstops/response(", i, ").json")
+  # Handle the case for response.json (without the index)
+  if(i == 0) {
+    file_name <- "dataset/busstops/response.json"
+  }
+  json_read <- fromJSON(file_name, flatten = TRUE)
+  bus_data <- rbind(bus_data, json_read$value)
+}
+bus_spatial <- st_as_sf(bus_data, coords = c("Longitude", "Latitude"), crs = 4326)
+
+
+#Nightlife DataFrame
+#already a spatial dataframe
+nightlife <- st_read('dataset/processed_datasets/nightlife_locations.geojson', crs = 4326)
+
+```
+
+
+## Visualizing Youth Density
+
+So the first step is to see how youth density looks like. Now what we notice is that youth density is a point plot, so let's see how that looks. 
+
+
+```{r yth pts}
+#Plot the points to visualise how the values look #plot takes a while to load
+yth_spatial_map <- tm_shape(base_map_no_border) + tm_borders() + 
+  tm_shape(yth_spatial) + tm_dots(size = 0.05, col = 'youth', title = 'Youth Density(%)')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Youth Densities(%) \nin Singapore",
+            title.position = c('left', 'top'))
+yth_spatial_map
+
+tmap_save(yth_spatial_map, filename = "plots/optimal_stops/yth_spatial_map.png")
+
+```
+
+No what we realise is that the youth points are clustered around a certain value, so we can actually represent them as polygons instead. 
+
+```{r yth polys}
+
+#We notice that a lot of the same values are congregated together, so lets make them into polygon
+#Group points with the same value and create convex hulls
+grouped_points <- yth_spatial %>%
+  group_by(youth) %>%
+  summarize()
+yth_poly <- grouped_points %>%
+  st_convex_hull()
+yth_poly <- yth_poly[-14,] #remove the individual point which is out of place 
+
+#Lets see how this looks like
+yth_poly_plot <- tm_shape(base_map_no_border) + tm_borders() + 
+  tm_shape(yth_poly) + tm_polygons(col = 'youth', title = 'Youth Density') + 
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="HDB locations \nwithin Singapore",
+            title.position = c('left', 'top'))
+yth_poly_plot
+
+tmap_save(yth_poly_plot, filename = "plots/optimal_stops/yth_poly_map.png")
+```
+
+Computation is MUCH faster now as we have reduced from 217054 data points to 32 polygons, great!  
+Now lets visualise the HDBs. 
+
+```{r hdb_yth poly}
+
+joined <- st_join(hdb_spatial,yth_poly) #combine the HDB data with the youth density to assign youth density values to each HDB
+
+#HDB point graph
+hdb_point_plot <- tm_shape(base_map) + tm_borders() + 
+  tm_shape(hdb_spatial) + tm_dots(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.75, 
+            legend.title.size = 1.5,
+            title="HDB locations \nwithin Singapore",
+            title.position = c('left', 'top'))
+
+hdb_point_plot
+
+tmap_save(hdb_point_plot, filename = "plots/optimal_stops/hdb_point_plot.png")
+
+```
+
+Lastly, lets see the combination of both youth density and HDBs
+
+```{r yth and hdbs}
+
+hdb_yth_plot <- tm_shape(base_map) + tm_borders() + 
+  tm_shape(yth_poly) + tm_polygons(col = 'youth', title = 'Youth Density') + 
+    tm_shape(hdb_spatial) + tm_dots(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="HDB locations \nwithin Singapore",
+            title.position = c('left', 'top'))
+
+hdb_yth_plot
+
+tmap_save(hdb_yth_plot, filename = "plots/optimal_stops/hdb_yth_plot.png")
+```
+
+## Fixing data
+
+So now our objective is to assing a youth density value to each HDB. However, what we noticed is that some HDBs (especially in the punggol area) are missing values and we also have some locations with multiple values. Now in order to fill in the data, rather than imputing with the mean, we decided that we can interpolate the data.  
+
+In terms of deciding which interpolation method to use, we decided to use IDW as the appropriate method to fill in the data. This is becaus we wanted a deterministic model in order to fill in the missing data **consistently**. Furthermore, kringing would not perform well for this form of missing data which only has data from one side but not the other.  
+
+So our first step is to create a simple dataframe which contains both the youth density data and HDB locations.
+
+```{r joined}
+joined <- st_join(hdb_spatial,yth_poly) #combine the HDB data with the youth density to assign youth density values to each HDB
+
+#First, we need to seperate out data with NA values and only interpolate on coordinates with points
+
+joined_noNA <- joined %>% filter(!is.na(youth))
+joined_spatial <- as(joined_noNA, "Spatial")
+
+```
+
+We then create our raster grid for the IDW process.
+
+```{r sg raster}
+
+base_spatial <- as(base_map, 'Spatial')
+
+#Creating a raster layer for interpolation
+grd              <- as.data.frame(spsample(base_spatial, "regular", n=10000))
+names(grd)       <- c("lat", "lng")
+coordinates(grd) <- c("lat", "lng")
+gridded(grd)     <- TRUE
+fullgrid(grd)    <- TRUE
+
+crs(grd) <- crs(base_spatial)
+
+```
+
+Now onto creating the IDW, determining a good idp value and plotting it out.
+
+```{r idw}
+
+yth.idw <- gstat::idw(youth ~ 1, joined_spatial, newdata=grd, idp=3.0) #idp of 3 chosen as we want closer values to mean more
+
+#Find out what is a good idp value to use #10min runtime
+IDW.out <- vector(length = length(joined_spatial))
+for (i in 1:length(joined_spatial)) {
+  IDW.out[i] <- gstat::idw(youth ~ 1, joined_spatial[-i,], joined_spatial[i,], idp=3.0)$var1.pred
+}
+
+
+#Plot the differences
+OP <- par(pty="s", mar=c(4,3,0,0))
+plot(IDW.out ~ joined_spatial$youth, asp=1, xlab="Observed", ylab="Predicted", pch=16,
+     col=rgb(0,0,0,0.5))
+abline(lm(IDW.out ~ joined_spatial$youth), col="red", lw=2,lty=2)
+abline(0,1)
+par(OP)
+
+#Looks like the IDW looks valid
+
+r_hdb_idw       <- raster(yth.idw)
+r_hdb_idw.m     <- mask(r_hdb_idw, base_spatial) 
+
+
+idw_full <- tm_shape(r_hdb_idw.m) + 
+  tm_raster(n=10,palette = "Blues", stretch.palette = FALSE,title="Predicted Youth Density (%)") +
+  tm_shape(base_map) + tm_borders() + tm_fill(alpha = 0) +
+  tm_shape(joined_spatial) + tm_dots(size=0.005) +
+  tm_legend(legend.outside=TRUE) +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="IDW of HDB locations",
+            title.position = c('left', 'top'))
+
+idw_full
+
+tmap_save(idw_full, filename = "plots/optimal_stops/idw_full.png")
+```
+
+## Filtering
+
+Now that we have assigned each HDB a youth density value, the next step would be to filter out HDBs with lower youth density values.  
+
+The first step to doing that is by visualising the IDW values in a histogram. We hace also calculated some key stats for the youth density values.
+
+```{r hist}
+#EDA on youth density, making a histogram of youth densities
+yth_hist <- r_hdb_idw@data@values
+
+hist <- ggplot(data.frame(values = yth_hist), aes(x = values)) +
+  geom_histogram(binwidth = 0.1, fill = "lightblue", color = "black", aes(y = ..count..)) +
+  ggtitle("Histogram of Youth Densities (%)") +
+  xlab("Youth Density (%)") +
+  ylab("Frequency") + theme_minimal()
+
+hist
+
+ggsave("plots/optimal_stops/hist.png",hist)
+
+#A couple of statistics for youth density
+mean(yth_hist)
+median(yth_hist)
+quantile(yth_hist,0.25)
+quantile(yth_hist,0.75)
+max(yth_hist)
+
+```
+
+
+The next step would be to determine a good threshold for youth density to filter out the HDB locations. Ideally, we would want to split the HDBs into 2 regions for the ideal bus stops to run well.  
+
+Over a number of iterations, we set this filter to take the HDBs in the top 50% of youth densitys.  
+
+Unfortunately, because assigning each HDB to the value from the raster grid is computationally intensive, we decided to reclassify the raster layer into 25 layers from 0 to 12.5 with a 0.5 interval. This can be seen in the chunk below.
+
+```{r assigning yth}
+
+#Before we move on, we realise that with spatial interpolation, the assigning of values will take a really long time
+#As such, we reclassify the values into groups before converting them nto polygons for analysis
+
+reclass_value_idw <- c(0,0.25,0) #to reclass values into 25 different bins
+for (i in seq(0,24,1)) {
+  reclass_value_idw[3*i + 4] = 0.25 + 0.5*i
+  reclass_value_idw[3*i + 5] = 0.75 + 0.5*i
+  reclass_value_idw[3*i + 6] = 0.5 + 0.5*i
+}
+
+reclass_r_hdb_idw <- reclassify(as(r_hdb_idw, "RasterLayer"), reclass_value_idw) #reclassify kde values to groups
+filtered_r_hdb_idw <- reclass_r_hdb_idw
+filtered_r_hdb_idw[filtered_r_hdb_idw <= quantile(yth_hist,0.5)] <- NA
+
+#overlaid IDW polygon plot with hdb plot  
+filtered_r_hdb_idw.m     <- mask(filtered_r_hdb_idw, base_spatial) 
+
+
+idw_filter <- tm_shape(filtered_r_hdb_idw.m) + 
+  tm_raster(n=10,palette = "Blues", stretch.palette = FALSE,title="Predicted Youth Density (%)") +
+  tm_shape(base_map) + tm_borders() + tm_fill(alpha = 0) +
+  tm_shape(joined_spatial) + tm_dots(size=0.005) +
+  tm_legend(legend.outside=TRUE) +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Filtered IDW of  HDB locations",
+            title.position = c('left', 'top'))
+
+idw_filter
+
+tmap_save(idw_filter, filename = "plots/optimal_stops/idw_filter.png")
+
+```
+
+
+Now what we are left is to remove the HDBs which lie outside the new raster layer. In order to accomplish this, we convert the raster values into polygons of equal value. Then an intersection is taken to fitler out the remaining HDBs. The resultant plot is as such.
+
+
+```{r hdb filter}
+
+#Converting raster layer into polygons to view overlay over Singapore
+threshold <- quantile(yth_hist,0.5) #define a threshold to determine what values of youth density we drop
+hdb_idw <- rasterToPolygons(reclass_r_hdb_idw, fun = function(x) {x > threshold},dissolve = TRUE) #
+hdb_idw <- st_as_sf(hdb_idw)
+hdb_idw <- hdb_idw %>% rename(youth = var1.pred)
+hdb_idw <- st_cast(hdb_idw,'MULTIPOLYGON')
+st_crs(hdb_idw) <- st_crs("EPSG:4326") #set crs for new polygons
+hdb_idw <- st_intersection(hdb_idw, base_map) #to ensure new polygons stay within SG boundary
+
+#assigning each hdb a youth value by intersecting the multipolygons to with all hdbs
+hdb_yth_pts <- st_intersection(hdb_spatial, hdb_idw)
+
+idw_final <- tm_shape(base_map) + tm_borders() + 
+  tm_shape(hdb_idw) + tm_polygons(col = 'youth', title = 'Youth Density', palette = 'Blues') + 
+    tm_shape(hdb_yth_pts) + tm_dots(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Filtered HDB locations",
+            title.position = c('left', 'top'))
+
+idw_final
+
+tmap_save(idw_final, filename = "plots/optimal_stops/idw_final.png")
+
+```
+
+
+## Determining HDB Centroids
+
+Now we have the fitered HDBs, we want to find out the centroids of the filtered HDB areas. This is so that we can then find out busstops which are most relevant to these HDBs. In order to accomplish this, we ran a KDE with a bandwidth of 1.4km on the filtered HDBs to view their clustering.
+
+
+```{r kde start}
+
+hdb_points <- as(hdb_yth_pts, "Spatial")
+hdb_centers <- kde.points(hdb_points, h = 0.013) #1.4km bandwidth 
+hdb_centers_sf <- st_as_sf(hdb_centers)
+
+r_hdb_centers       <- raster(hdb_centers)
+r_hdb_centers.m     <- mask(r_hdb_centers, base_spatial) 
+  
+kde_first <- tm_shape(r_hdb_centers.m) + 
+  tm_raster(n=10, stretch.palette = FALSE,title="KDE Values") +
+  tm_shape(base_map) + tm_borders() + tm_fill(alpha = 0) +
+  tm_shape(hdb_yth_pts) + tm_dots(size=0.005) +
+  tm_legend(legend.outside=TRUE) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="KDE of HDB locations",
+            title.position = c('left', 'top'))
+
+kde_first
+
+tmap_save(kde_first, filename = "plots/optimal_stops/kde_first.png")
+
+```
+
+
+We then reclassified the kde values into 5 equal groups from 0 to 500 and removed the first 2 layers. This results in the following.
+
+```{r kde second}
+
+#Reclassify values in raster to make contour lines as seen in KDE plot.
+reclass_values <- c(0,100,1, #reclassify kde values from 0-50 in group 1 and so on
+                    100,200,2,
+                    200,300,3,
+                    300,400,4,
+                    400,500,5,
+                    500,600,6)
+
+reclass_hdb_centers <- reclassify(as(hdb_centers, "RasterLayer"), reclass_values) #reclassify kde values to groups
+hdb_centers_poly <- rasterToPolygons(reclass_hdb_centers, dissolve = T) #to make a polygon layer
+hdb_centers_poly <- st_as_sf(hdb_centers_poly) #to make an SF object
+hdb_centers_poly <- hdb_centers_poly[-c(1,2),] #remove polys with low kde values 
+hdb_centers_poly <- st_cast(hdb_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
+
+hdb_centers_poly$kde <- factor(hdb_centers_poly$kde) #to tell R to recognise the colours as categories
+
+kde_second <- tm_shape(base_map) + tm_borders() + 
+  tm_shape(hdb_centers_poly) + tm_polygons(col = 'kde', title = 'KDE Group', palette = 'YlOrRd') + 
+    tm_shape(hdb_yth_pts) + tm_dots(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Filtered KDEs with HDBs",
+            title.position = c('left', 'top'))
+
+kde_second
+
+tmap_save(kde_second, filename = "plots/optimal_stops/kde_second.png")
+
+```
+
+
+Now it is hard to see the KDE polygons on that plot. To make the polygons easier to view, we plot the centroids of the individual layers to determine the central point of the HDB locations.
+
+
+```{r KDE centroids}
+
+#get the centroids of each polygon
+hdb_centers_points <- st_centroid(hdb_centers_poly)
+
+#HDB Centroids
+kde_centroid <- tm_shape(base_map) + tm_borders() + 
+  tm_shape(hdb_centers_poly) + tm_polygons(col = 'kde', title = 'KDE Group', palette = 'YlOrRd') + 
+    tm_shape(hdb_centers_points) + tm_dots(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Filtered KDEs with HDBs",
+            title.position = c('left', 'top'))
+
+kde_centroid
+
+tmap_save(kde_centroid, filename = "plots/optimal_stops/kde_centroid.png")
+
+
+```
+
