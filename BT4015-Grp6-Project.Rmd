@@ -57,6 +57,7 @@ yth_data <- read.csv("dataset/filteredSG_population_density.csv") %>% dplyr::sel
 coordinates(population) <- ~longitude+latitude
 
 # 2.5 HDB Data (Points Vectors)
+
 hdb <- read.csv("dataset/hdb.csv") %>% mutate(addr = paste(blk_no,street)) %>% dplyr::select(addr,lat,lng)
 
 # 2.6 Bus Stops Data (Points Vectors)
@@ -121,8 +122,12 @@ ppp_data <- as.ppp(population)
 yth_sf <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
 yth_sf <- st_transform(yth_sf, crs = st_crs(subzones)) # project to basemap's CRS
 
+View(hdb)
 # 3.4 HDB
-
+coordinates <- cbind(hdb$lng, hdb$lat) 
+hdb_sp_data <- SpatialPointsDataFrame(coordinates, data = data.frame(hdb), proj4string = CRS("+proj=longlat +datum=WGS84"))
+hdb_sf <- st_as_sf(hdb_sp_data)
+hdb_sf <- st_transform(hdb_sf, crs = st_crs(subzones)) # project to basemap's
 
 # 3.5 Bus Stops
 bus_sf <- st_as_sf(bus_data, coords = c("Longitude", "Latitude"), crs = 4326)
@@ -133,18 +138,18 @@ bus_sf <- st_transform(bus_sf, crs = st_crs(subzones)) # project to basemap's CR
 
 ### 4. Analysis on Distribution of Nightlife location in Singapore
 ```{r spatial operations}
-tmap_mode('plot')
+tmap_mode('view')
 tmap_options(check.and.fix = TRUE)
 # Local Density - Quadrat
 
 tm_shape(base_map) + tm_borders(col='black') + 
-  tm_shape(nightlife_sf) + tm_dots(size = 0.0075, col = "red") + # Nightlife locations
+  tm_shape(hdb_sf) + tm_dots(size = 0.0075, col = "black") + # Nightlife locations
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
             legend.text.size = 0.25, 
             legend.title.size = 0.5,
-            title="Nightlife location in Singapore",
+            title="HDBs location in Singapore",
             title.position = c('left', 'bottom'))
 
 
@@ -156,7 +161,7 @@ tm_shape(base_map) + tm_borders(col='black') +
             legend.position = c("left", "bottom"),
             legend.text.size = 0.25, 
             legend.title.size = 0.5,
-            title="Nightlife location in Singapore",
+            title="Nightlife density in Singapore",
             title.position = c('left', 'bottom'))
 # KDE - use nightlife_ppp here
 
@@ -170,18 +175,27 @@ central_plg <- subzones %>% filter(PLN_AREA_C %in% c("DT", "SR", "RC", "OT") | S
 
 nightlife_filtered_sf <- st_intersection(nightlife_sf, central_plg)
 restaurant_filtered_sf <- st_intersection(restaurants_sf, central_plg)
-
 midnight_restaurant_filtered_sf <- restaurant_filtered_sf %>% filter(midnight_restaurant == 'True')
 
-tm_shape(central_plg) + tm_borders(col='black') + 
-  tm_shape(nightlife_filtered_sf) + tm_dots(col = "red") + 
-  tm_shape(restaurant_filtered_sf) + tm_dots(col = "blue") +
+View(nightlife_filtered_sf)
+
+nightlife_filtered_sf$label = 'nightlife locations'
+
+nightlife_filtered_sf <- nightlife_filtered_sf %>% select(label)
+
+midnight_restaurant_filtered_sf$label = 'late night restaurants'
+
+midnight_restaurant_filtered_sf <- midnight_restaurant_filtered_sf %>% select(label)
+
+combined <- rbind(nightlife_filtered_sf, midnight_restaurant_filtered_sf)
+
+  tm_shape(combined) + tm_dots(col = c("label")) + 
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
             legend.text.size = 0.25, 
             legend.title.size = 0.5,
-            title="Nightlife location in Singapore",
+            title="Nightlife locations and late night restaurants in Central Singapore",
             title.position = c('left', 'bottom'))
 
 
@@ -195,7 +209,7 @@ latenight_restaurants_ppp <- as.ppp(midnight_restaurant_filtered_sf)
 marks(latenight_restaurants_ppp) <- "latenight restaurants"
 latenight_restaurants_ppp$n
 restaurants_ppp$n
-P <- superimpose(nightlife_ppp, restaurants_ppp)
+P <- superimpose(nightlife_ppp, latenight_restaurants_ppp)
 
 # hypothesis testing for the distribution of nightlife and latenight restaurants
 nn.sim = vector()
@@ -204,9 +218,18 @@ for(i in 1:999){
   marks(P.r) = sample(P$marks)  # Reassign labels at random, point locations don't change
   nn.sim[i] = mean(nncross(P.r[P.r$marks == "nightlife", ] ,P.r[P.r$marks == "latenight restaurants", ])$dist)
 }
-hist(nn.sim,breaks=30, xlim=c(0,300))
-abline(v=mean(nncross(nightlife_ppp,restaurants_ppp)$dist),col="red")
+hist(nn.sim,breaks=30, xlim=c(0,300), main="Histogram of nearest neighbour distance")
+abline(v=mean(nncross(nightlife_ppp,latenight_restaurants_ppp)$dist),col="red")
 
+marks(P) <- factor(marks(P))
+marks(latenight_restaurants_ppp) <- factor(marks(latenight_restaurants_ppp))
+
+
+PPM1 <- ppm(P ~ marks)
+PPM0 <- ppm(P ~ 1)
+PPM0
+PPM1
+anova(PPM0, PPM1, test="LRT")
 
 
 nncross(restaurants_ppp,nightlife_ppp,k=1:3)
