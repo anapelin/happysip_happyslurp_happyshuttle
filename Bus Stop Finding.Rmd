@@ -29,6 +29,8 @@ library(magick)
 ```
 
 
+# Finding optimal bus stops
+
 ## Creating base layer map
 
 Here we also set the crs to WGS84 as it causes calculation later to be simple as other data is left as lat lon coordinated.
@@ -86,11 +88,13 @@ bus_spatial <- st_as_sf(bus_data, coords = c("Longitude", "Latitude"), crs = 432
 
 
 #Nightlife DataFrame
-#already a spatial dataframe
-nightlife <- st_read('dataset/processed_datasets/nightlife_locations.geojson', crs = 4326)
+nightlife <- st_read('dataset/processed_datasets/nightlife_locations.geojson', crs = st_crs(subzones))
+nightlife <- st_transform(nightlife, crs = st_crs(4326))
 
 ```
 
+
+# HDBs Bus Stop Analysis
 
 ## Visualizing Youth Density
 
@@ -588,5 +592,252 @@ bus_final
 
 tmap_save(bus_final, filename = "plots/optimal_stops/bus_final.png")
 
+```
+
+
+Now to help out with plotting optimal rouths, we want to tag each bus stop with an additional attribute stating what subzone it is in. We then can export this as a geojson file to be saved later.
+
+```{r subzone tagging}
+
+#Now we want to add the region attribute to each datapoint for each bus stop for later
+#First extract out the polygons with the regions only
+combined_base_map <- subzones %>%
+  group_by(REGION_N) %>%
+  summarise(geometry = st_combine(geometry)) 
+combined_base_map <- st_transform(combined_base_map, crs = 4326)
+combined_base_map <- st_make_valid(combined_base_map)
+
+final_closest_busstops <- st_intersection(closest_busstops,combined_base_map) #get the regions for each busstop 
+final_closest_busstops <- distinct(final_closest_busstops) #remove duplicated rows
+final_closest_busstops <- final_closest_busstops %>% rename(Region = REGION_N)
+
+#Export as a geojson such for bus line analysis
+#st_write(final_closest_busstops, "bus_stops.geojson", driver = 'geoJSON',append = T) # DO NOT RUN AGAIN, IT WILL KEEP ADDING LAYERS 
 
 ```
+
+We lastly want to evaluate how well our bus stops capture the HDBs in Singapore.
+
+We do 2 forms of evaluation, one for all HDBS and one for our filtered HDBs.To then capture covered, we created a 1.5km buffer for each bus stop. The union of all busstops then determine our effectiveness in capturing the HDBs in Singapore. 
+
+```{r bus stop eval}
+
+#create buffers for each centroid
+closest_busstops_buffer <- st_buffer(final_closest_busstops, dist = 1500) #1.5km buffer
+closest_busstops_buffer <- st_union(closest_busstops_buffer) #join the buffers together
+closest_busstops_buffer <- st_cast(closest_busstops_buffer,'POLYGON') #join the buffers together
+closest_busstops_buffer <- st_make_valid(closest_busstops_buffer)
+
+
+num_hdb_captured <- nrow(st_intersection(hdb_spatial, closest_busstops_buffer))
+percentage_captured <- num_hdb_captured / nrow(hdb_spatial)
+print(percentage_captured)
+#1.5km radius: 47.1% HDB captured for all HDBs
+
+
+num_hdb_captured <- nrow(st_intersection(hdb_yth_pts, closest_busstops_buffer))
+percentage_captured <- num_hdb_captured / nrow(hdb_yth_pts)
+print(percentage_captured)
+#1.5km radius: 97.7% HDB captured for filtered HDBs
+
+
+
+```
+
+We can then visualise the evaluatation below.
+
+
+```{r eval plots}
+
+
+#Busstop buffers with ALL HDBs
+eval_all <- tm_shape(base_map) + tm_borders() + 
+  tm_shape(closest_busstops_buffer) + tm_polygons(col = 'yellow') + 
+  tm_shape(hdb_spatial) + tm_bubbles(size = 0.05, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Bus Stop Buffers \nwith All HDBs",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+eval_all
+
+#Busstop buffers with Filtered HDBs
+eval_filter <-tm_shape(base_map) + tm_borders() + 
+  tm_shape(closest_busstops_buffer) + tm_polygons(col = 'yellow') + 
+  tm_shape(hdb_yth_pts) + tm_bubbles(size = 0.05, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Bus Stop Buffers \nwith Filtered HDBs",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+eval_filter
+
+
+tmap_save(eval_all, filename = "plots/optimal_stops/eval_all.png")
+tmap_save(eval_filter, filename = "plots/optimal_stops/eval_filter.png")
+
+```
+
+
+# Nightlife Bus Stop Analysis
+
+We then repeated the same process with nightlife locations, except no IDW filtering was used here. A summarised version of the process is written below. 
+
+A bandwidth of 750m was used and a buffer of 500m was used.
+
+```{r nightlife}
+
+#Onto finding ideal busstops for nightlife
+
+#Central area of SG
+central_area <- base_map %>% filter(PLN_AREA_N %in% c('DOWNTOWN CORE', 'SINGAPORE RIVER', 'MUSEUM','ROCHOR', 'KALLANG','OUTRAM')) %>% filter(!SUBZONE_N %in% c('TANJONG RHU', 'BENDEMEER','KALLANG BAHRU','KAMPONG BUGIS','BOON KENG','GEYLANG BAHRU'))
+central_area <- st_make_valid(central_area)
+
+nightlife_points <- as(nightlife, "Spatial")
+nightlife_centers <- kde.points(nightlife_points, h = 0.00675) #750mm smoothing
+nightlife_centers_sf <- st_as_sf(nightlife_centers)
+
+r_nightlife_centers       <- raster(nightlife_centers)
+r_nightlife_centers.m     <- mask(r_nightlife_centers, base_spatial) 
+  
+kde_n_first <- tm_shape(r_nightlife_centers.m) + 
+  tm_raster(n=10, stretch.palette = FALSE,title="KDE Values") +
+  tm_shape(base_map) + tm_borders() + tm_fill(alpha = 0) +
+  tm_shape(nightlife) + tm_dots(size=0.005) +
+  tm_legend(legend.outside=TRUE) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="KDE of nightlife locations",
+            title.position = c('left', 'top'))
+
+kde_n_first
+
+tmap_save(kde_first, filename = "plots/optimal_stops/kde_n_first.png")
+
+
+#reclassification for polygons
+reclass_values_2 <- c(0,max(nightlife_centers$kde) / 6,1, #reclassify kde values from 0-1000 in group 1 and so on
+                      max(nightlife_centers$kde) / 6,2 * max(nightlife_centers$kde) / 6,2,
+                      2* max(nightlife_centers$kde) / 6,3 * max(nightlife_centers$kde) / 6,3,
+                      3* max(nightlife_centers$kde) / 6,4 * max(nightlife_centers$kde) / 6,4,
+                      4* max(nightlife_centers$kde) / 6,5 * max(nightlife_centers$kde) / 6,5,
+                      5* max(nightlife_centers$kde) / 6,6 * max(nightlife_centers$kde) / 6,6)
+                      #6* max(nightlife_centers$kde) / 7, max(nightlife_centers$kde),7)
+
+reclass_nightlife_centers <- reclassify(as(nightlife_centers, "RasterLayer"), reclass_values_2) #reclassify kde values to groups
+nightlife_centers_poly <- rasterToPolygons(reclass_nightlife_centers, dissolve = T, digits = 6) #to make a polygon layer
+nightlife_centers_poly <- st_as_sf(nightlife_centers_poly) #to make an SF object
+nightlife_centers_poly <- nightlife_centers_poly[-c(1,2),] #remove polys with low kde values 
+nightlife_centers_poly <- st_cast(nightlife_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
+nightlife_centers_poly$kde <- factor(nightlife_centers_poly$kde)
+
+
+kde_n_second <- tm_shape(central_area) + tm_borders() + 
+  tm_shape(nightlife_centers_poly) + tm_polygons(col = 'kde', title = 'KDE Group', palette = 'YlOrRd') + 
+    tm_shape(nightlife) + tm_dots(size = 0.2, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Filtered KDEs with nightlifes",
+            title.position = c('left', 'top'))
+
+kde_n_second
+
+tmap_save(kde_second, filename = "plots/optimal_stops/kde_second.png")
+
+#get the centroids of each polygon
+nightlife_centers_points <- st_centroid(nightlife_centers_poly)
+#find closest busstop to each centroid
+nightlife_centers_points <- st_transform(nightlife_centers_points, crs = 4326)
+closest_nightlife_busstops_index <- st_nearest_feature(nightlife_centers_points, bus_spatial)
+closest_nightlife_busstops <- bus_spatial[closest_nightlife_busstops_index,]
+
+#bustops closest to each centroid
+nightlife_final <- tm_shape(central_area) + tm_borders() + 
+  tm_shape(nightlife_centers_poly) + tm_polygons(col = 'kde', title = 'KDE Group', palette = 'YlOrRd') +
+  tm_shape(closest_nightlife_busstops) + tm_bubbles(size = 0.25, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Final Bus Stops \n(Nightlife)",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+nightlife_final
+
+tmap_save(nightlife_final, filename = "plots/optimal_stops/nightlife_final.png")
+
+#assigning location attribute to each busstop
+#not needed as all are Central, but for completeness sake
+
+combined_base_map_nightlife <- central_area %>%
+  group_by(REGION_N) %>%
+  summarise(geometry = st_combine(geometry)) 
+combined_base_map_nightlife <- st_transform(combined_base_map_nightlife, crs = 4326)
+combined_base_map_nightlife <- st_make_valid(combined_base_map_nightlife)
+
+final_closest_busstops_nightlife <- st_intersection(closest_nightlife_busstops,combined_base_map_nightlife) #get the regions for each busstop 
+final_closest_busstops_nightlife <- distinct(final_closest_busstops_nightlife) #remove duplicated rows
+final_closest_busstops_nightlife <- final_closest_busstops_nightlife %>% rename(Region = REGION_N)
+
+st_write(final_closest_busstops_nightlife, "bus_stops_nightlife.geojson")
+
+#Evaluation
+#creating buffer
+closest_nightlife_busstops_buffer <- st_buffer(final_closest_busstops_nightlife, dist = 500) #500m buffer
+closest_nightlife_busstops_buffer <- st_union(closest_nightlife_busstops_buffer) #join the buffers together
+closest_nightlife_busstops_buffer <- st_cast(closest_nightlife_busstops_buffer,'POLYGON') #join the buffers together
+closest_nightlife_busstops_buffer <- st_make_valid(closest_nightlife_busstops_buffer)
+
+
+#percentage covered
+num_nightlife_captured <- nrow(st_intersection(nightlife, closest_nightlife_busstops_buffer))
+percentage_captured <- num_nightlife_captured / nrow(nightlife)
+print(percentage_captured)
+#500m radius: 71.0% nightlife captured
+
+#plotting the coverage
+
+eval_nightlife <-tm_shape(central_area) + tm_borders() + 
+  tm_shape(closest_nightlife_busstops_buffer) + tm_polygons(col = 'yellow') + 
+  tm_shape(nightlife) + tm_bubbles(size = 0.5, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Bus Stop Buffers \nwith Nightlife",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+eval_nightlife
+
+tmap_save(eval_nightlife, filename = "plots/optimal_stops/eval_nightlife.png")
+```
+
+
+The geojson files are then sent to the python code to determine optimal bus routes.
+
+DONE! 
+
+
+
+
