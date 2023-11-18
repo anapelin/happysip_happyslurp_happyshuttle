@@ -612,7 +612,7 @@ final_closest_busstops <- distinct(final_closest_busstops) #remove duplicated ro
 final_closest_busstops <- final_closest_busstops %>% rename(Region = REGION_N)
 
 #Export as a geojson such for bus line analysis
-#st_write(final_closest_busstops, "bus_stops.geojson", driver = 'geoJSON',append = T) # DO NOT RUN AGAIN, IT WILL KEEP ADDING LAYERS 
+#st_write(final_closest_busstops, "dataset/processed_datasets/bus_stops.geojson", driver = 'geoJSON',append = T) # DO NOT RUN AGAIN, IT WILL KEEP ADDING LAYERS 
 
 ```
 
@@ -797,7 +797,7 @@ final_closest_busstops_nightlife <- st_intersection(closest_nightlife_busstops,c
 final_closest_busstops_nightlife <- distinct(final_closest_busstops_nightlife) #remove duplicated rows
 final_closest_busstops_nightlife <- final_closest_busstops_nightlife %>% rename(Region = REGION_N)
 
-st_write(final_closest_busstops_nightlife, "bus_stops_nightlife.geojson")
+#st_write(final_closest_busstops_nightlife, "dataset/processed_datasets/bus_stops_nightlife.geojson")
 
 #Evaluation
 #creating buffer
