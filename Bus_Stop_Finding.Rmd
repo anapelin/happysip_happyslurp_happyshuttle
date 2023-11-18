@@ -753,7 +753,7 @@ kde_n_second <- tm_shape(central_area) + tm_borders() +
             legend.position = c("left", "top"),
             legend.text.size = 0.5, 
             legend.title.size = 1,
-            title="Filtered KDEs with nightlifes",
+            title="Filtered KDEs \nwith Nightlife",
             title.position = c('left', 'top'))
 
 kde_n_second
