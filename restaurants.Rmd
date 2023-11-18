@@ -45,6 +45,8 @@ restaurants_sf <- st_transform(restaurants_sf, crs=st_crs(subzones)) # project t
 ### 3. PLot nighlife and restaurant locations
 ```{r plot}
 # Plot of nightlife locations only
+tmap_mode("view")
+
 tm_shape(base_map) + tm_borders(col='black') + 
   tm_shape(nightlife_sf) + tm_dots(size = 0.01, col = "black") +
   tm_compass(type="8star", size = 2) +
@@ -88,6 +90,7 @@ tm_shape(base_map) + tm_borders(col='black') +
             title.position = c('left', 'bottom'))
 ```
 
+### 4. KDE for nightlife locations
 ```{r}
 nightlife_points <- as(nightlife_sf, "Spatial")
 nightlife_centers <- kde.points(nightlife_points, h = 500)
@@ -137,6 +140,8 @@ print(length(nightlife_kde))
 print(nrow(nightlife_sf))
 print(sprintf("A total of %d nightlife locations lie in the filtered KDE regions, out of %d original nightlife locations. That means %f of nightlife locations lie in the filtered KDE regions.", length(nightlife_kde), nrow(nightlife_sf), length(nightlife_kde)/nrow(nightlife_sf)))
 ```
+
+### 4. Finding intersection between restaurants and regions of high nightlife point density
 ```{r}
 
 # Combine polygons by KDE class and find its intersection with restaurants
@@ -166,7 +171,11 @@ print(kde_restaurant_count)
 
 ```{r}
 # Plot of all non-midnight restaurants within the extracted polygons
-tm_shape(intersection_result) +
+tm_shape(restaurant_intersection) +
+  tm_bubbles(size = 0.1, col = "kde") +
+  tm_layout(legend.show = TRUE)
+
+tm_shape(restaurant_intersection) +
   tm_bubbles(size = 0.1, col = "kde") +
   tm_shape(midnight_intersection_result) +
   tm_bubbles(size = 0.1, col = "black") +
