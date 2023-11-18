@@ -1,11 +1,11 @@
 ---
-title: "Project"
+title: "Story 1: Supper"
 output:
   pdf_document: default
   html_document: default
 date: "2023-10-09"
 ---
-### 1. Setting up
+## 1. Setting up
 ```{r setup, include=FALSE}
 library(GISTools)
 library(raster)
@@ -22,193 +22,67 @@ library(spatstat)
 library(spdep)
 library(jsonlite)
 library(dplyr)
-library(osmdata)
+library(gstat)
+
 ```
 
-### 2. Loading Data
-```{r data loading, include=FALSE}
-
-# 2.1 Basemap - Singapore Subzones (Polygons Vectors)
+```{r basemap}
 subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
-base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
-base_map <- base_map %>% select(ISO)
-base_map <- st_transform(base_map, crs=st_crs(subzones))
-
-# 2.2 Nightlife (Bars + Clubs) Data (Points Vectors)
-query <- opq(bbox = "singapore, singapore") %>% 
-  add_osm_feature(key = "amenity", value = c("bar","biergarten", "pub", "nightclub"))
-rawdata_nightlife <- osmdata_sf(query)
-nightlife_points <- rawdata_nightlife$osm_points %>% drop_na(name) %>%
-  dplyr::select(name, amenity, `addr:postcode`, `addr:street`) 
-nightlife_plg <- rawdata_nightlife$osm_polygons %>% drop_na(name) %>%
-  dplyr::select(name, amenity, `addr:postcode`, `addr:street`) %>%
-  st_centroid()
-nightlife <- rbind(nightlife_points, nightlife_plg)
-
-# 2.3 Midnight Restaurants Crowd Density Data
-rawdata_restaurants <- read.csv("dataset/besttime/restaurants.csv")
-# Restaurant DataFrame: lat, lng, name of restaurant, is_midnight, crowd density on fri and sat
-restaurants <- rawdata_restaurants %>% dplyr::select(name, lat, lon, midnight_restaurant, fri_cd, sat_cd)
-restaurants_coordinates <- cbind(restaurants$lon, restaurants$lat)
-
-# 2.4 Population - Youth Data (Points Vectors)
-population <- read.csv("dataset/filteredSG_population_density.csv")
-yth_data <- read.csv("dataset/filteredSG_population_density.csv") %>% dplyr::select(longitude, latitude, youth)
-coordinates(population) <- ~longitude+latitude
-
-# 2.5 HDB Data (Points Vectors)
-
-hdb <- read.csv("dataset/hdb.csv") %>% mutate(addr = paste(blk_no,street)) %>% dplyr::select(addr,lat,lng)
-
-# 2.6 Bus Stops Data (Points Vectors)
-bus_data <- data.frame()
-for(i in 0:10) {
-  file_name <- paste0("dataset/busstops/response(", i, ").json")
-  # Handle the case for response.json (without the index)
-  if(i == 0) {
-    file_name <- "dataset/busstops/response.json"
-  }
-  json_read <- fromJSON(file_name, flatten = TRUE)
-  bus_data <- rbind(bus_data, json_read$value)
-}
-
+#Central area of SG
+base_map <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+central_area <- base_map %>% filter(PLN_AREA_N %in% c('DOWNTOWN CORE', 'BUKIT MERAH', 'SINGAPORE RIVER', 'MUSEUM', 'RIVER VALLEY', 'ORCHARD','NEWTON','ROCHOR','TANGLIN', 'KALLANG','OUTRAM')) %>% filter(!SUBZONE_N %in% c( 'CITY TERMINALS','MARITIME SQUARE','ALEXANDRA HILL','TELOK BLANGAH DRIVE','DEPOT ROAD','TELOK BLANGAH WAY','TELOK BLANGAH RISE'))
+base_map <- st_transform(central_area, crs=st_crs(central_area)) 
 ```
 
-### 3. Transforming to Spatial Data
+### 2. Distribution of Nightlife locations and latenight Restaurants
 
-```{r data transformation}
-# 3.1 Nightlife Locations
+```{r Nightlife-Restaurants Central distribution}
+# Load filtered Nightlife - Restaurants Data
 
-# Create a Nightlife Spatial Points DataFrame
-nightlife_sf <- st_transform(nightlife, crs=st_crs(subzones)) # project to basemap's CRS
-nightlife_sf <- st_intersection(nightlife_sf, base_map) # remove extra points
+# Load nightlife locations
+nightlife_sf <- st_read("dataset/processed_datasets/nightlife_locations.geojson", crs=st_crs(subzones))
+nightlife_sf <- st_transform(nightlife_sf, crs=st_crs(subzones)) # project to basemap's CRS
 
-# Convert to Nightlife Point Pattern dataset
-nightlife_ppp <- as.ppp(nightlife_sf)
+# Load restaurants
+restaurants_sf <- st_read("dataset/processed_datasets/restaurants.geojson", crs=st_crs(subzones))
+restaurants_sf <- st_transform(restaurants_sf, crs=st_crs(subzones)) # project to basemap's CRS
 
-# Combine with subzones for Nightlife Density DataFrame
-nightlife_subzone <- st_join(subzones, nightlife_sf)
-nightlife_density_subzone <- nightlife_subzone %>%
-  group_by(SUBZONE_N) %>%
-  summarize(nightlife_density = sum(!is.na(name)))
-
-
-# 3.2 Midnight Restaurants
-
-# Create a Restaurants Spatial Points DataFrame
-restaurants_sp_data <- SpatialPointsDataFrame(restaurants_coordinates, data = data.frame(restaurants), proj4string = CRS("+proj=longlat +datum=WGS84"))
-restaurants_sf <- st_as_sf(restaurants_sp_data)
-restaurants_sf <- st_transform(restaurants_sf, crs = st_crs(subzones)) # project to basemap's CRS
-
-# Convert to Restaurants Point Pattern dataset
-restaurants_ppp <- as.ppp(restaurants_sf)
-
-# Combine with subzones for Restaurants Density DataFrame
-restaurants_subzone <- st_join(subzones, restaurants_sf)
-restaurants_density_subzone <- restaurants_subzone %>%
-  group_by(SUBZONE_N) %>%
-  summarize(restaurants_density = sum(!is.na(name)))
-
-# 3.3 Population - Youth Density
-
-# Create a Population Raster Dataset
-r <- raster(extent(population), resolution=c(0.001, 0.001)) # Here 0.001 is an example resolution. Adjust as necessary.
-under5_raster <- rasterize(population, r, field="under5", fun=mean)
-
-# Convert to Population Point Pattern dataset
-ppp_data <- as.ppp(population)
-
-# Create a Youth Spatial Polygon DataFrame
-yth_sf <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
-yth_sf <- st_transform(yth_sf, crs = st_crs(subzones)) # project to basemap's CRS
-
-View(hdb)
-# 3.4 HDB
-coordinates <- cbind(hdb$lng, hdb$lat) 
-hdb_sp_data <- SpatialPointsDataFrame(coordinates, data = data.frame(hdb), proj4string = CRS("+proj=longlat +datum=WGS84"))
-hdb_sf <- st_as_sf(hdb_sp_data)
-hdb_sf <- st_transform(hdb_sf, crs = st_crs(subzones)) # project to basemap's
-
-# 3.5 Bus Stops
-bus_sf <- st_as_sf(bus_data, coords = c("Longitude", "Latitude"), crs = 4326)
-bus_sf <- st_transform(bus_sf, crs = st_crs(subzones)) # project to basemap's CRS
-
-
-```
-
-### 4. Analysis on Distribution of Nightlife location in Singapore
-```{r spatial operations}
-tmap_mode('view')
-tmap_options(check.and.fix = TRUE)
-# Local Density - Quadrat
-
-tm_shape(base_map) + tm_borders(col='black') + 
-  tm_shape(hdb_sf) + tm_dots(size = 0.0075, col = "black") + # Nightlife locations
-  tm_scale_bar(width = 0.15) +
-  tm_layout(legend.format = list(digits = 0),
-            legend.position = c("left", "bottom"),
-            legend.text.size = 0.25, 
-            legend.title.size = 0.5,
-            title="HDBs location in Singapore",
-            title.position = c('left', 'bottom'))
-
-
-# Local Density - By Subzone
-tm_shape(base_map) + tm_borders(col='black') + 
-  tm_shape(nightlife_density_subzone) + tm_polygons(col = "nightlife_density") + 
-  tm_scale_bar(width = 0.15) +
-  tm_layout(legend.format = list(digits = 0),
-            legend.position = c("left", "bottom"),
-            legend.text.size = 0.25, 
-            legend.title.size = 0.5,
-            title="Nightlife density in Singapore",
-            title.position = c('left', 'bottom'))
-# KDE - use nightlife_ppp here
-
-
-
-
-```
-
-```{r central area point pattern}
-central_plg <- subzones %>% filter(PLN_AREA_C %in% c("DT", "SR", "RC", "OT") | SUBZONE_N %in% c("LAVENDER"))
-
-nightlife_filtered_sf <- st_intersection(nightlife_sf, central_plg)
-restaurant_filtered_sf <- st_intersection(restaurants_sf, central_plg)
-midnight_restaurant_filtered_sf <- restaurant_filtered_sf %>% filter(midnight_restaurant == 'True')
-
-View(nightlife_filtered_sf)
-
-nightlife_filtered_sf$label = 'nightlife locations'
-
+nightlife_filtered_sf = nightlife_sf
+nightlife_filtered_sf$label = 'Nightlife locations'
 nightlife_filtered_sf <- nightlife_filtered_sf %>% select(label)
 
-midnight_restaurant_filtered_sf$label = 'late night restaurants'
-
+midnight_restaurant_filtered_sf = restaurants_sf %>% filter(midnight_restaurant=="True")
+midnight_restaurant_filtered_sf$label = 'Late night restaurants'
 midnight_restaurant_filtered_sf <- midnight_restaurant_filtered_sf %>% select(label)
 
 combined <- rbind(nightlife_filtered_sf, midnight_restaurant_filtered_sf)
 
-  tm_shape(combined) + tm_dots(col = c("label")) + 
+tm_shape(central_area) + tm_polygons(col="white") + 
+  tm_shape(combined) + tm_dots(size= 0.15, col = "label", palette = c("green2", "blue")) + 
+  tm_compass(type="8star", size = 2) +
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
-            legend.position = c("left", "bottom"),
-            legend.text.size = 0.25, 
-            legend.title.size = 0.5,
-            title="Nightlife locations and late night restaurants in Central Singapore",
-            title.position = c('left', 'bottom'))
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Nightlife and Latenight restaurants at Central Area",
+            title.position = c('left', 'top'))
+```
 
+### 3. Hypothesis Testing of 2nd order effect
 
-
+``` {r PPA}
+  
+# Point pattern analysis
 nightlife_ppp <- as.ppp(nightlife_filtered_sf)
 marks(nightlife_ppp) <- "nightlife"
 nightlife_ppp$n
-restaurants_ppp <- as.ppp(restaurant_filtered_sf)
-marks(restaurants_ppp) <- "restaurants"
+
 latenight_restaurants_ppp <- as.ppp(midnight_restaurant_filtered_sf)
 marks(latenight_restaurants_ppp) <- "latenight restaurants"
 latenight_restaurants_ppp$n
-restaurants_ppp$n
+
+
 P <- superimpose(nightlife_ppp, latenight_restaurants_ppp)
 
 # hypothesis testing for the distribution of nightlife and latenight restaurants
@@ -218,74 +92,439 @@ for(i in 1:999){
   marks(P.r) = sample(P$marks)  # Reassign labels at random, point locations don't change
   nn.sim[i] = mean(nncross(P.r[P.r$marks == "nightlife", ] ,P.r[P.r$marks == "latenight restaurants", ])$dist)
 }
-hist(nn.sim,breaks=30, xlim=c(0,300), main="Histogram of nearest neighbour distance")
-abline(v=mean(nncross(nightlife_ppp,latenight_restaurants_ppp)$dist),col="red")
+hist(nn.sim,breaks=30, xlim=c(50,200), main="Histogram of nearest neighbour distance")
+actual_dist = mean(nncross(nightlife_ppp,latenight_restaurants_ppp)$dist)
+abline(v=actual_dist,col="red")
+axis(1, at=actual_dist,labels=round(actual_dist,1))
 
-marks(P) <- factor(marks(P))
-marks(latenight_restaurants_ppp) <- factor(marks(latenight_restaurants_ppp))
+```
+
+As the p-value is 1, there is strong evidence that the observed distribution of nightlife locations and late-night restaurants is unlikely to have occurred by random chance.
+
+### 4.Crowd Density Interpolation
+
+```{r bcr data}
+
+#Bars and Clubs Crowd Density dataframe
+bcr <- read_csv('dataset/besttime/processed_bars_clubs.csv')
+bcr <- na.omit(bcr)
+#Restaurants Crowd Density dataframe
+res <- read_csv('dataset/besttime/processed_restaurants.csv')
+res <- na.omit(res)
+res <- res %>% rename(`12am_cd` = `12pm_cd`)
+
+bcr <- bcr %>% select(lat,lon, `10pm_cd`,`11pm_cd`,`12am_cd`,`1am_cd`,`2am_cd`) %>% mutate(cat = "Bars and Clubs")
+res <- res %>% select(lat,lon, `10pm_cd`,`11pm_cd`,`12am_cd`,`1am_cd`,`2am_cd`)%>% mutate(cat = "Restaurants")
+bcr <- rbind(bcr,res)
+
+bcr$`cd_10` <- bcr$`10pm_cd`
+bcr$`cd_11` <- bcr$`11pm_cd`
+bcr$`cd_12` <- bcr$`12am_cd`
+bcr$`cd_1` <- bcr$`1am_cd`
+bcr$`cd_2` <- bcr$`2am_cd`
+
+coordinates(bcr) <- ~lon + lat
 
 
-PPM1 <- ppm(P ~ marks)
-PPM0 <- ppm(P ~ 1)
-PPM0
-PPM1
-anova(PPM0, PPM1, test="LRT")
+#Tranform to spatial dataframe and see how it looks like
+plot(bcr) #notice that one point is so much further away than the rest
+bcr <- bcr[-c(10,49),] #Remove that one point for better interpolation
+plot(bcr) #Corrected plot without annoying point
+
+bcr$X <- coordinates(bcr)[,1]
+bcr$Y <- coordinates(bcr)[,2]
+
+bcr <- bcr[-zerodist(bcr)[,1],]
+
+base_spatial <- as(base_map, 'Spatial')
 
 
-nncross(restaurants_ppp,nightlife_ppp,k=1:3)
+bcr_spatial <- st_as_sf(bcr, coords = c("lon", "lat"))
+```
+
+
+```{r grid}
+
+#Making the raster grid
+
+grd              <- as.data.frame(spsample(bcr, "regular", n=50000))
+names(grd)       <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd)     <- TRUE
+fullgrid(grd)    <- TRUE
+
+crs(grd) <- crs(bcr)
+
+```
+
+
+```{r interpolates}
+
+#10pm
+f.bcr <- as.formula(cd_10 ~ lon + lat) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.0025)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.025, nugget=600))
+
+# The following plot allows us to assess the fit
+vari_plot_10 <- plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.05))
+vari_plot_10
+
+
+f.bcr <- as.formula(cd_10 ~ X + Y) 
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+
+#tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+i_10 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Interpolation of Crowd Density at 10pm", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120),alpha = 0.7) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+
+#11pm
+
+f.bcr <- as.formula(cd_11 ~ lon + lat) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.0025)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.025, nugget=650))
+
+# The following plot allows us to assess the fit
+vari_plot_11 <- plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.05))
+vari_plot_11
+
+
+f.bcr <- as.formula(cd_11 ~ X + Y) 
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+
+#tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+i_11 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Interpolation of Crowd Density at 11pm", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120),alpha = 0.7) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+#12am
+
+f.bcr <- as.formula(cd_12 ~ lon + lat) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.0025)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.025, nugget=650))
+
+# The following plot allows us to assess the fit
+vari_plot_12 <- plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.05))
+vari_plot_12
+
+
+f.bcr <- as.formula(cd_12 ~ X + Y) 
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+
+#tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+i_12 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Interpolation of Crowd Density at 12am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120),alpha = 0.7) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+#1am
+
+f.bcr <- as.formula(cd_1 ~ lon + lat) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.0025)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.025, nugget=650))
+
+# The following plot allows us to assess the fit
+vari_plot_1 <- plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.05))
+vari_plot_1
+
+
+f.bcr <- as.formula(cd_1 ~ X + Y) 
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+
+#tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+i_1 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Interpolation of Crowd Density at 1am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120),alpha = 0.7) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+#2am
+
+f.bcr <- as.formula(cd_2 ~ lon + lat) 
+
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.0025)
+
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.025, nugget=650))
+
+# The following plot allows us to assess the fit
+vari_plot_2 <- plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.05))
+vari_plot_2
+
+
+f.bcr <- as.formula(cd_2 ~ X + Y) 
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+
+#tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+i_2 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Interpolation of Crowd Density at 1am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120),alpha = 0.7) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+
+
 
 
 ```
 
 
-``` {r raster-foottraffic}
-# Nightlife (Bars + Clubs) Crowd Density Data
-rawdata_bars <- fromJSON("dataset/besttime/bars.json", flatten=TRUE)
-rawdata_clubs <- fromJSON("dataset/besttime/clubs.json", flatten=TRUE)
-relevant_columns <- c("venue_lat", "venue_lon", "venue_name", "venue_foot_traffic_forecast")
-bars <- rawdata_bars$venues[relevant_columns]
-clubs <- rawdata_clubs$venues[relevant_columns]
-nightlife_ft <- rbind(bars, clubs)
-ft <- nightlife_ft$venue_foot_traffic_forecast
+```{r 2bcr}
 
-for (i in 1:nrow(nightlife_ft)) {
-  data = ft[[i]]
-  nightlife_ft$fri_cd[i] <- ifelse(is.null(data), NA, data$day_raw[4])
-  nightlife_ft$sat_cd[i] <- ifelse(is.null(data), NA, data$day_raw[5])
-}
-nightlife_ft <- nightlife_ft %>% select(-venue_foot_traffic_forecast)
+f.bcr <- as.formula(cd_2 ~ 1) 
 
-coordinates <- cbind(nightlife_ft$venue_lon, nightlife_ft$venue_lat) 
-# Convert the dataframe to a SpatialPointsDataFrame
-nightlife_ft_sp <- SpatialPointsDataFrame(coordinates, data = data.frame(nightlife_ft), proj4string = CRS("+proj=longlat +datum=WGS84"))
-# convert to sf 
-nightlife_ft_sf <- st_as_sf(nightlife_ft_sp) 
-nightlife_ft_sf <- st_transform(nightlife_ft_sf, crs=st_crs(subzones))
+var.smpl.bcr <- variogram(f.bcr, bcr, cloud = FALSE, cutoff=1, width=0.001)
 
-restaurants_ft_sf <- restaurants_sf
+dat.fit.bcr  <- fit.variogram(var.smpl.bcr, fit.ranges = F, fit.sills = F,
+                          vgm(psill=400, model="Wav", range=0.015, nugget=300))
 
-hours_to_select <- c(17, 18, 19, 20, 21)
-for (i in 1:5) {
-  new_fri_ft <- paste0("ft_fri_hour", hours_to_select[i])
-  nightlife_ft_sf[[new_fri_ft]] <- sapply(nightlife_ft_sf$fri_cd, function(x) x[hours_to_select[i]])
-  restaurants_ft_sf[[new_fri_ft]] <- sapply(restaurants_ft_sf$fri_cd, function(x) {
-    if (x == "") {return(NA)}
-    else {fromJSON(x)[hours_to_select[i]]}})
-  new_sat_ft <- paste0("ft_sat_hour", hours_to_select[i])
-  nightlife_ft_sf[[new_sat_ft]] <- sapply(nightlife_ft_sf$sat_cd, function(x) x[hours_to_select[i]])
-  restaurants_ft_sf[[new_sat_ft]] <- sapply(restaurants_ft_sf$sat_cd, function(x) {
-    if (x == "") {return(NA)}
-    else {fromJSON(x)[hours_to_select[i]]}})
-}
-View(nightlife_ft_sf)
-View(restaurants_ft_sf)
-View(foottraffic_sf)
-
-foottraffic_sf <- nightlife_ft_sf %>% select(-c(venue_lat, venue_lon, fri_cd, sat_cd)) %>% rename("name" = "venue_name") %>% mutate(type = "nightlife")
+# The following plot allows us to assess the fit
+plot(var.smpl.bcr, dat.fit.bcr, xlim = c(0, 0.06))
 
 
-foottraffic_sf <- rbind(foottraffic_sf, restaurants_ft_sf %>% select(-c(lat, lon, fri_cd, sat_cd)) %>% mutate(type = ifelse(midnight_restaurant)))
+
+f.bcr <- as.formula(cd_2 ~ 1) 
+
+
+dat.krg <- krige(f.bcr, bcr, grd, dat.fit.bcr)
+
+r <- raster(dat.krg)
+# r.m <- mask(r, W)
+
+tm_shape(r) + 
+  tm_raster(n=10, stretch.palette=FALSE, 
+            title="Predicted Crowd Density at 2am", palette = 'RdBu', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120), midpoint = 0) +
+  tm_shape(bcr) + tm_dots(size=0.05, col = 'cd_2', palette = 'RdBu', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120), midpoint = 0) +
+  tm_legend(legend.outside=TRUE)
 
 ```
 
-As the p-value is 0, we  strong evidence that the observed distribution of nightlife locations and late-night restaurants is unlikely to have occured by random chance
+
+
+
+```{r trends}
+
+#install.packages('magick')
+library(magick)
+f.bcr <- as.formula(cd_10 ~ X + Y) 
+
+lm.1 <- lm(f.bcr, data = bcr)
+
+dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+r   <- raster(dat.1st)
+
+l_1 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Linear Trend of Crowd Density at 10pm", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+
+f.bcr <- as.formula(cd_11 ~ X + Y) 
+
+lm.1 <- lm(f.bcr, data = bcr)
+
+dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+r   <- raster(dat.1st)
+
+l_2 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Linear Trend of Crowd Density at 11pm", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+
+f.bcr <- as.formula(cd_12 ~ X + Y) 
+
+lm.1 <- lm(f.bcr, data = bcr)
+
+dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+r   <- raster(dat.1st)
+
+l_3 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Linear Trend of Crowd Density at 12am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+f.bcr <- as.formula(cd_1 ~ X + Y) 
+
+lm.1 <- lm(f.bcr, data = bcr)
+
+dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+r   <- raster(dat.1st)
+
+l_4 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Linear Trend of Crowd Density at 1am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+f.bcr <- as.formula(cd_2 ~ X + Y) 
+
+lm.1 <- lm(f.bcr, data = bcr)
+
+dat.1st <- SpatialGridDataFrame(grd, data.frame(var1.pred = predict(lm.1, newdata=grd))) 
+r   <- raster(dat.1st)
+
+l_5 <- tm_shape(r) + 
+  tm_raster(n=13, stretch.palette=FALSE, 
+            title="Linear Trend of Crowd Density at 2am", palette = 'Reds', style = 'fixed',breaks = c(-10,0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2')) +
+  tm_legend(legend.outside=TRUE)
+
+
+```
+
+
+```{r trend animations}
+
+
+tmap_save(l_1, filename = "plots/crowd_density/linear trend at 10pm.png")
+tmap_save(l_2, filename = "plots/crowd_density/linear trend at 11pm.png")
+tmap_save(l_3, filename = "plots/crowd_density/linear trend at 12am.png")
+tmap_save(l_4, filename = "plots/crowd_density/linear trend at 1am.png")
+tmap_save(l_5, filename = "plots/crowd_density/linear trend at 2am.png")
+
+img_list <- image_read(c("plots/crowd_density/linear trend at 10pm.png","plots/crowd_density/linear trend at 11pm.png","plots/crowd_density/linear trend at 12am.png","plots/crowd_density/linear trend at 1am.png","plots/crowd_density/linear trend at 2am.png"))
+animation <- image_animate(img_list, fps = 1)  # Adjust fps as needed
+image_write(animation, path = "plots/crowd_density/linear trends.gif")
+
+
+```
+
+
+
+## 5. KDE to recommend new late night restaurants
+
+```{r kde-of-nightlife}
+nightlife_points <- as(nightlife_sf, "Spatial")
+nightlife_centers <- kde.points(nightlife_points, h = 500)
+nightlife_centers_sf <- st_as_sf(nightlife_centers)
+
+tmap_mode("plot")
+tm_shape(nightlife_centers) + tm_raster()
+```
+
+
+```{r get-kde-polygons}
+reclass_values <- c(0,0.0000002,1, #reclassify kde values from 0-0.0000002 in group 1 and so on
+                    0.0000002,0.0000004,2,
+                    0.0000004,0.0000006,3,
+                    0.0000006,0.0000008,4,
+                    0.0000008,0.0000010,5,
+                    0.0000010,0.0000012,6)
+
+reclass_nightlife_centers <- reclassify(as(nightlife_centers, "RasterLayer"), reclass_values) #reclassify kde values to groups
+nightlife_centers_poly <- rasterToPolygons(reclass_nightlife_centers, dissolve = T) #to make a polygon layer
+nightlife_centers_poly <- st_as_sf(nightlife_centers_poly) #to make an SF object
+nightlife_centers_poly <- nightlife_centers_poly[-c(1),] #remove polys with low kde values 
+nightlife_centers_poly <- st_cast(nightlife_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
+```
+
+```{r plot-kde}
+nightlife_centers_poly <- st_transform(nightlife_centers_poly, crs=st_crs(subzones)) # project to basemap's CRS
+
+# Plot of nightlife location and density polygons
+tm_shape(base_map) + tm_borders() + 
+  tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde') + 
+  tm_shape(nightlife_sf) + tm_bubbles(size = 0.001, col = "black")  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="KDE of Nightlife locations in Central Singapore",
+            title.position = c('left', 'top'))
+```
+
+```{r get restaurants-in-kde-region}
+# Filter for nightlife locations within KDE regions
+all_kde <- st_union(nightlife_centers_poly)
+nightlife_kde <- st_intersection(all_kde, nightlife_sf)
+print(length(nightlife_kde))
+print(nrow(nightlife_sf))
+print(sprintf("A total of %d nightlife locations lie in the filtered KDE regions, out of %d original nightlife locations. That means %f of nightlife locations lie in the filtered KDE regions.", length(nightlife_kde), nrow(nightlife_sf), length(nightlife_kde)/nrow(nightlife_sf)))
+```
+```{r recommended-restaurants}
+
+midnight_restaurants <- restaurants_sf %>%
+  filter(midnight_restaurant == "True")
+
+non_midnight_restaurants <- restaurants_sf %>%
+  filter(midnight_restaurant == "False")
+
+# Combine polygons by KDE class and find its intersection with restaurants
+grouped_union <- nightlife_centers_poly %>%
+  group_by(kde) %>%
+  summarise(geometry = st_union(geometry))
+
+nightlife_intersection <- st_intersection(grouped_union, nightlife_sf)
+
+kde_nightlife_count <- nightlife_intersection %>%
+  group_by(kde) %>%
+  summarise(nightlife_count = n())
+
+print(kde_nightlife_count)
+
+# Combine polygons by KDE class and find its intersection with restaurants
+restaurant_intersection <- st_intersection(grouped_union, non_midnight_restaurants)
+midnight_restaurant_intersection <- st_intersection(grouped_union, midnight_restaurants)
+
+kde_restaurant_count <- restaurant_intersection %>%
+  group_by(kde) %>%
+  summarise(restaurant_count = n())
+
+# View the result
+print(kde_restaurant_count)
+```
+
+```{r}
+# Plot of all non-midnight restaurants within the extracted polygons
+tm_shape(restaurant_intersection) +
+  tm_bubbles(size = 0.1, col = "kde") +
+  tm_shape(midnight_restaurant_intersection) +
+  tm_bubbles(size = 0.1, col = "black") +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Recommended Restaurants in Central Singapore",
+            title.position = c('left', 'top'))
+```
