@@ -34,11 +34,14 @@ Code files in the main directory are labelled No.1 to 5 with each representing t
 4. optimal_bus_stops - Contains the 2 recommended route of our public transportation analysis bringing individuals from downtown to high youth density HDB residential areas post midnight
 
 # Example Plots of our Analysis
-![linear trend at 12am.png](plots%2Fcrowd_density%2Flinear%20trend%20at%2012am.png)
 ![linear trends.gif](plots%2Fcrowd_density%2Flinear%20trends.gif)
+
 ![hdb_yth_plot.png](plots%2Foptimal_stops%2Fhdb_yth_plot.png)
+
 ![idw_final.png](plots%2Foptimal_stops%2Fidw_final.png)
+
 ![east_optimal_bus_route.png](plots%2Foptimal_bus_routes%2Feast_optimal_bus_route.png)
+
 ![west_optimal_busroute.png](plots%2Foptimal_bus_routes%2Fwest_optimal_busroute.png)
 ---
 *This project is part of the BT4015 Geospatial Analytics module in the National University of Singapore (NUS) Academic Year 2023/2024 created by Ana Pelin, Minh Hai, Shayer Ahmed, Jeremy Chan Tse Ee, Zhuo Yun Hui*
