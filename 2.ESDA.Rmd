@@ -1,0 +1,363 @@
+---
+title: "Project Group 8 - "Happy Sip Happy Slurp Happy Shuttle" - ESDA  "
+output:
+  #pdf_document: default
+  html_document: default
+date: "2023-11-18"
+---
+### 1. Setting up
+```{r setup, include=FALSE}
+library(GISTools)
+library(raster)
+library(tmap)
+library(rgdal) 
+library(maptools) 
+library(sp)
+library(sf)
+library(tidyverse)
+library(rgeos)
+library(ggplot2)
+library(psych)
+library(spatstat)
+library(spdep)
+library(jsonlite)
+library(dplyr)
+library(osmdata)
+```
+
+### 2. Loading Data
+```{r data loading, include=FALSE}
+
+# 2.1 Basemap - Singapore Subzones (Polygons Vectors)
+subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
+base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
+base_map <- base_map %>% select(ISO)
+base_map <- st_transform(base_map, crs=st_crs(subzones))
+
+# 2.2 Nightlife (Bars + Clubs) Data (Points Vectors)
+query <- opq(bbox = "singapore, singapore") %>% 
+  add_osm_feature(key = "amenity", value = c("bar","biergarten", "pub", "nightclub"))
+rawdata_nightlife <- osmdata_sf(query)
+nightlife_points <- rawdata_nightlife$osm_points %>% drop_na(name) %>%
+  dplyr::select(name, amenity, `addr:postcode`, `addr:street`) 
+nightlife_plg <- rawdata_nightlife$osm_polygons %>% drop_na(name) %>%
+  dplyr::select(name, amenity, `addr:postcode`, `addr:street`) %>%
+  st_centroid()
+nightlife <- rbind(nightlife_points, nightlife_plg)
+
+# 2.3 Midnight Restaurants Crowd Density Data
+rawdata_restaurants <- read.csv("dataset/besttime/restaurants.csv")
+# Restaurant DataFrame: lat, lng, name of restaurant, is_midnight, crowd density on fri and sat
+restaurants <- rawdata_restaurants %>% dplyr::select(name, lat, lon, midnight_restaurant, fri_cd, sat_cd)
+restaurants_coordinates <- cbind(restaurants$lon, restaurants$lat)
+
+# 2.4 Population - Youth Data (Points Vectors)
+population <- read.csv("dataset/filteredSG_population_density.csv")
+yth_data <- read.csv("dataset/filteredSG_population_density.csv") %>% dplyr::select(longitude, latitude, youth)
+coordinates(population) <- ~longitude+latitude
+
+# 2.5 HDB Data (Points Vectors)
+hdb <- read.csv("dataset/hdb.csv") %>% mutate(addr = paste(blk_no,street)) %>% dplyr::select(addr,lat,lng)
+
+# 2.6 Bus Stops Data (Points Vectors)
+bus_data <- data.frame()
+for(i in 0:10) {
+  file_name <- paste0("dataset/busstops/response(", i, ").json")
+  # Handle the case for response.json (without the index)
+  if(i == 0) {
+    file_name <- "dataset/busstops/response.json"
+  }
+  json_read <- fromJSON(file_name, flatten = TRUE)
+  bus_data <- rbind(bus_data, json_read$value)
+}
+
+#2.7 Grab food outlets (Points Vectors)
+
+food_outlets <- read.csv("dataset/grab.csv")
+coordinates(food_outlets) <- ~lon + lat
+
+```
+
+### 3. Transforming to Spatial Data
+
+```{r data transformation}
+# 3.1 Nightlife Locations
+
+# Create a Nightlife Spatial Points DataFrame
+nightlife_sf <- st_transform(nightlife, crs=st_crs(subzones)) # project to basemap's CRS
+nightlife_sf <- st_intersection(nightlife_sf, base_map) # remove extra points
+
+# Convert to Nightlife Point Pattern dataset
+nightlife_ppp <- as.ppp(nightlife_sf)
+
+# Combine with subzones for Nightlife Density DataFrame
+nightlife_subzone <- st_join(subzones, nightlife_sf)
+nightlife_density_subzone <- nightlife_subzone %>%
+  group_by(SUBZONE_N) %>%
+  summarize(nightlife_density = sum(!is.na(name)))
+
+
+# 3.2 Midnight Restaurants
+
+# Create a Restaurants Spatial Points DataFrame
+restaurants_sp_data <- SpatialPointsDataFrame(restaurants_coordinates, data = data.frame(restaurants), proj4string = CRS("+proj=longlat +datum=WGS84"))
+restaurants_sf <- st_as_sf(restaurants_sp_data)
+restaurants_sf <- st_transform(restaurants_sf, crs = st_crs(subzones)) # project to basemap's CRS
+
+# Convert to Restaurants Point Pattern dataset
+restaurants_ppp <- as.ppp(restaurants_sf)
+
+# Combine with subzones for Restaurants Density DataFrame
+restaurants_subzone <- st_join(subzones, restaurants_sf)
+restaurants_density_subzone <- restaurants_subzone %>%
+  group_by(SUBZONE_N) %>%
+  summarize(restaurants_density = sum(!is.na(name)))
+
+# 3.3 Population - Youth Density
+
+# Create a Population Raster Dataset
+r <- raster(extent(population), resolution=c(0.001, 0.001)) # Here 0.001 is an example resolution. Adjust as necessary.
+under5_raster <- rasterize(population, r, field="under5", fun=mean)
+
+# Convert to Population Point Pattern dataset
+ppp_data <- as.ppp(population)
+
+# Create a Youth Spatial Polygon DataFrame
+yth_sf <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
+yth_sf <- st_transform(yth_sf, crs = st_crs(subzones)) # project to basemap's CRS
+
+
+# 3.4 Bus Stops
+bus_sf <- st_as_sf(bus_data, coords = c("Longitude", "Latitude"), crs = 4326)
+bus_sf <- st_transform(bus_sf, crs = st_crs(subzones)) # project to basemap's CRS
+
+
+```
+
+
+### 4 ESDA - Dataset Visualization 
+```{r spatial operations}
+
+tmap_mode('plot')
+tmap_options(check.and.fix = TRUE)
+
+
+# Filtering on the central area for the datasets of interest
+
+# Clipping into the central area of hte basemap
+central_plg <- subzones %>% filter(PLN_AREA_C %in% c("DT", "SR", "RC", "OT") | SUBZONE_N %in% c("LAVENDER"))
+
+# Filtering the nightlife and restaurant data
+nightlife_filtered_sf <- st_intersection(nightlife_sf, central_plg)
+restaurant_filtered_sf <- st_intersection(restaurants_sf, central_plg)
+
+midnight_restaurant_filtered_sf <- restaurant_filtered_sf %>% filter(midnight_restaurant == 'True')
+
+# Filter the midnight restaurants from full grab dataset
+restaurants_midnight <- subset(restaurants, midnight_restaurant == "True")
+
+
+### Nightlife and restaurants visualisation ###
+
+# Create Singapore map with nightlife location distribution
+tm_shape(base_map) + tm_borders() + #tm_fill() +
+  tm_shape(nightlife_sf) + tm_dots(size = 0.25, scale = 0.5, col = "black") + 
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.75, 
+            legend.title.size = 1.5,
+            title="Nightlife venues in Singapore",
+            title.position = c('left', 'top'))  
+  
+
+# Create Singapore map with food outlets location distribution
+tm_shape(base_map) + tm_borders(col='black') + #tm_fill() +
+  tm_shape(food_outlets) + tm_dots(size = 0.05, col = "black") +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Grab food outlets \n across Singapore",
+            title.position = c('left', 'top'))
+
+# Create Singapore Map with nightlife density plot
+tm_shape(base_map) + tm_borders(col='black') + #tm_fill() +
+  tm_shape(nightlife_density_subzone) + tm_polygons(col = "nightlife_density", name ="Nightlife") +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Nightlife density across Singapore",
+            title.position = c('left', 'top'))
+
+
+# Create Singapore Map with restaurant density plot
+tm_shape(central_plg) + tm_borders(col='black') + #tm_fill() +
+  tm_shape(restaurants_density_subzone) + tm_polygons(col = "restaurants_density", name ="Restaurant") +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.4, 
+            legend.title.size = 0.7,
+            title="Restaurant density across central Singapore",
+            title.position = c('left', 'top'))
+            
+            
+# Create Singapore map with food outlets and nightlife location distribution
+tm_shape(central_plg) + tm_borders() + #tm_fill(col = "orange") +
+  tm_text("SUBZONE_N", size = 0.25) +
+  tm_shape(nightlife_density_subzone) + tm_polygons(col = "nightlife_density", name ="Nightlife") +
+  tm_shape(midnight_restaurant_filtered_sf) + tm_dots(size = 0.1, col = "black") +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.4, 
+            legend.title.size = 0.7,
+            title="Grab food outlets across Singapore",
+            title.position = c('left', 'top'))
+
+
+# Create Singapore map with food outlets & nightlife location distribution + bus stops
+tm_shape(base_map) + tm_borders(col='black')  + 
+  tm_shape(nightlife_density_subzone) + tm_polygons(col = "nightlife_density", name ="Nightlife") + 
+  #tm_text("SUBZONE_N", size = 0.37)+
+  tm_shape(bus_sf) + tm_symbols(size = 0.0075, col = "black", shape =21) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Bus Stops",
+            title.position = c('left', 'top'))
+
+
+# Create Singapore map with food outlets & nightlife location distribution + bus stops
+tm_shape(central_plg) + tm_borders(col='black') + tm_fill(col = "orange") + 
+  #tm_shape(bus_sf) + tm_symbols(size = 0.0075, col = "darkgreen", shape =21) +
+  tm_shape(nightlife_filtered_sf) + tm_dots(size = 0.0075, col = "black") +
+  tm_shape(midnight_restaurant_filtered_sf) + tm_dots(size = 0.0075, col = "red") +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Food outlets and nightlife across Singapore",
+            title.position = c('left', 'top'))
+
+
+### Demographics visualisations ###
+
+# Create Singapore map with youth density distribution
+tm_shape(base_map) + tm_borders() + #tm_fill() +
+  tm_shape(yth_sf) + tm_polygons(col = "youth_density", name ="Youth") + 
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.75, 
+            legend.title.size = 1.5,
+            title="Nightlife venues in Singapore",
+            title.position = c('left', 'top'))  
+  
+  
+### Bus Stop Visualisation ###
+  
+# Create Singapore map with bus stop location
+tm_shape(base_map) + tm_borders() + #tm_fill() +
+  tm_shape(bus_sf) + tm_dots(size = 0.01, scale = 0.5, col = "black") + 
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.75, 
+            legend.title.size = 1.5,
+            title="Bus stops in Singapore",
+            title.position = c('left', 'top'))
+
+# Create Singapore map with bus stop in the center
+
+bus_stop_central <- st_intersection(central_plg, bus_sf)
+tm_shape(central_plg) + tm_borders() + #tm_fill() +
+  tm_shape(bus_stop_central) + tm_dots(size = 0.1, scale = 0.5, col = "black") + 
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.75, 
+            legend.title.size = 1.5,
+            title="Bus stops in \ncentral Singapore",
+            title.position = c('left', 'top'))
+
+
+
+
+
+
+```
+
+### 5 Nightlife location buffered area
+
+
+# goal: identify nightlife with no restaurants in proximity
+
+```{r spatial operations}
+tmap_mode('plot')
+tmap_options(check.and.fix = TRUE)
+
+# Buffer the nightlife
+
+nightlife_buffered <- st_buffer(nightlife_filtered_sf, dist = 200) #1.5km buffer
+nightlife_buffered <- st_union(nightlife_buffered) #join the buffers together
+closest_busstops_buffer <- st_cast(nightlife_buffered,'POLYGON') #join the buffers together
+nightlife_buffered <- st_make_valid(nightlife_buffered)
+
+# Create Singapore centre: midnight restaurants & nightlife location buffered for 
+
+tm_shape(central_plg) + tm_borders(col='black') + tm_fill(col = "orange") +
+  tm_shape(nightlife_buffered) + tm_polygons(col = "red") +
+  tm_shape(midnight_restaurant_filtered_sf) + tm_dots(size = 0.3, col = "black") +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="Grab food outlets across Singapore",
+            title.position = c('left', 'top'))
+
+
+```
+
+### 6. KDE for midnight restaurant locations
+```{r}
+
+# KDE interpolation to understand the density of restaurants in the central area
+restaurants_points <- as(midnight_restaurant_filtered_sf, "Spatial")
+rest_centers  <- kde.points(restaurants_points, h = 500)
+rest_centers_sf <- st_as_sf(rest_centers)
+
+
+tmap_mode("view")
+tm_shape(rest_centers) + tm_raster()
+
+reclass_values <- c(0,0.0000001,1, #reclassify kde values from 0-0.0000001 in group 1 and so on
+                    0.0000001,0.0000002,2,
+                    0.0000002,0.0000003,3,
+                    0.0000003,0.0000004,4,
+                    0.0000004,0.0000005,5,
+                    0.0000005,0.0000006,6)
+
+reclass_rest_centers <- reclassify(as(rest_centers, "RasterLayer"), reclass_values) 
+rest_centers_poly <- rasterToPolygons(reclass_rest_centers, dissolve = T) #to make a polygon layer
+rest_centers_poly <- st_as_sf(rest_centers_poly) #to make an SF object
+rest_centers_poly <- rest_centers_poly[-c(1),] #remove polys with low kde values 
+rest_centers_poly <- st_cast(rest_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
+``
