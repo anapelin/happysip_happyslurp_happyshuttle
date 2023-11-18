@@ -524,7 +524,7 @@ nightlife_centers_poly <- nightlife_centers_poly[-c(1,2),] #remove polys with lo
 nightlife_centers_poly <- st_cast(nightlife_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
 
 #Central area of SG
-central_area <- subzones #%>% filter(PLN_AREA_N %in% c('DOWNTOWN CORE', 'BUKIT MERAH', 'SINGAPORE RIVER', 'MUSEUM', 'RIVER VALLEY', 'ORCHARD','NEWTON','ROCHOR','TANGLIN', 'KALLANG'))
+central_area <- subzones %>% filter(PLN_AREA_N %in% c('DOWNTOWN CORE', 'BUKIT MERAH', 'SINGAPORE RIVER', 'MUSEUM', 'RIVER VALLEY', 'ORCHARD','NEWTON','ROCHOR','TANGLIN', 'KALLANG'))
 
 #map to show how the kde looks like with all nightlife spots
 tm_shape(base_map) + tm_borders() + 
