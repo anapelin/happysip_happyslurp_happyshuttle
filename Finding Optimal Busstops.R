@@ -35,10 +35,10 @@ library(gstat)
 # 2.1 Loading Raw Datafiles
 # Base Map
 subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
-base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
-base_map <- st_transform(border, crs=st_crs(subzones))
+# base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
+# base_map <- base_map %>% select(ISO)
+# base_map <- st_transform(base_map, crs=st_crs(subzones))
 base_map <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
-
 
 # Population + HDB Data
 data <- read.csv("dataset/filteredSG_population_density.csv")
@@ -59,13 +59,12 @@ for(i in 0:10) {
 bus_spatial <- st_as_sf(bus_data, coords = c("Longitude", "Latitude"), crs = 4326)
 
 
-# Nightlife (Bars + Clubs) Crowd Density Data
-rawdata_bars <- fromJSON("dataset/besttime/bars.json", flatten=TRUE)
-rawdata_clubs <- fromJSON("dataset/besttime/clubs.json", flatten=TRUE)
-relevant_columns <- c("venue_lat", "venue_lon", "venue_name")
-bars <- rawdata_bars$venues[relevant_columns]
-clubs <- rawdata_clubs$venues[relevant_columns]
+# # Nightlife (Bars + Clubs) Crowd Density Data
 
+ 
+# # Nightlife DataFrame: lat, lng, name of place, crowd density
+
+nightlife <- st_read('dataset/processed_datasets/nightlife_locations.geojson', crs = st_crs(subzones))
 
 # Restaurant Data
 
@@ -74,29 +73,22 @@ clubs <- rawdata_clubs$venues[relevant_columns]
 
 # HDB DataFrame: 
 
-# Nightlife DataFrame: lat, lng, name of place, crowd density
-nightlife <- rbind(bars, clubs)
-new_column_names <- c("lat", "lng", "name")
-nightlife <- setNames(nightlife, new_column_names)
 
 
 # 3. Preprocessing Data to Vectors/Rasters
 # 3.1 Nightlife Locations
 # Create a spatial data frame with points
-coordinates <- cbind(nightlife$lng, nightlife$lat) 
+#coordinates <- cbind(nightlife$lng, nightlife$lat) 
 
 # Convert the dataframe to a SpatialPointsDataFrame
-nightlife_sp_data <- SpatialPointsDataFrame(coordinates, data = data.frame(nightlife), proj4string = CRS("+proj=longlat +datum=WGS84"))
+#nightlife_sp_data <- SpatialPointsDataFrame(coordinates, data = data.frame(nightlife), proj4string = CRS("+proj=longlat +datum=WGS84"))
 # convert to sf 
-nightlife_sf_data <- st_as_sf(nightlife_sp_data) 
-nightlife_buffer <- st_buffer(nightlife_sf_data, dist = 100)
+#nightlife_sf_data <- st_as_sf(nightlife_sp_data) 
+#nightlife_buffer <- st_buffer(nightlife, dist = 100)
 
-
-tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
-  tm_shape(nightlife_sf_data) + tm_bubbles(size = 0.1, col = "red") +
-  tm_shape(nightlife_buffer) + tm_polygons() +
-  tm_compass(type="8star", size = 2) +
+tmap_options(check.and.fix = TRUE)
+tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+  tm_shape(nightlife) + tm_dots(size = 0.0075, col = "red") + # Nightlife locations
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
@@ -105,8 +97,7 @@ tm_shape(base_map) + tm_borders() +
             title="Nightlife location in Singapore",
             title.position = c('left', 'bottom'))
 
-
-coordinates(data) <- ~longitude+latitude
+#coordinates(data) <- ~longitude+latitude
 
 # Define the extent of the raster based on the spatial object
 # raster_extent <- extent(data)
@@ -161,25 +152,32 @@ table(data$gen)
 #Youth polygon
 yth_spatial <- st_as_sf(yth_data, coords = c("longitude", "latitude"), crs = 4326)
 
-# Group points with the same value and create convex hulls
+#Plot the points to visualise how the values look #plot takes a while to load
+tm_shape(base_map) + tm_borders() + 
+  tm_shape(yth_spatial) + tm_bubbles(size = 0.05, col = 'youth', border.alpha = 0)  +
+  tm_compass(type="8star", size = 2) +
+  tm_scale_bar(width = 0.15) +
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "bottom"),
+            legend.text.size = 0.25, 
+            legend.title.size = 0.5,
+            title="HDB location in Singapore",
+            title.position = c('left', 'bottom'))
+
+#We notice that a lot of the same values are congregated together, so lets make them into polygon
+#Group points with the same value and create convex hulls
 grouped_points <- yth_spatial %>%
   group_by(youth) %>%
   summarize()
 yth_poly <- grouped_points %>%
   st_convex_hull()
-yth_poly <- yth_poly[-14,] #remove the individual point which is out of place #or horh jeremy never draw ur boudnaries properly
+yth_poly <- yth_poly[-14,] #remove the individual point which is out of place 
 
 
-# Plot or analyze the resulting polygons
-plot(yth_poly) #polygon map of youth density
-class(yth_poly)
 
-
-#HDB points plotting
+#HDB points 
 hdb_spatial <- st_as_sf(hdb, coords = c("lng", "lat"), crs = 4326)
-class(hdb_spatial)
-joined <- st_join(hdb_spatial,yth_poly)
-plot(joined)
+joined <- st_join(hdb_spatial,yth_poly) #combine the HDB data with the youth density to assign youth density values to each HDB
 
 #I tried to plot both points and poly tgthr, looks OK 
 ggplot() +
@@ -192,7 +190,6 @@ ggplot() +
 #This plot is to show how some HDB lies outside the given density polys.
 #HDB with youth polygons
 tm_shape(base_map) + tm_borders() + 
-  tm_basemap('OpenStreetMap') + 
   tm_shape(yth_poly) + tm_polygons(col = 'youth') + 
   tm_shape(hdb_spatial) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) +
@@ -203,6 +200,8 @@ tm_shape(base_map) + tm_borders() +
             legend.title.size = 0.5,
             title="HDB location in Singapore",
             title.position = c('left', 'bottom'))
+
+
 
 #Interpolation to fill in missing data
 
@@ -220,7 +219,6 @@ gridded(grd)     <- TRUE
 fullgrid(grd)    <- TRUE
 
 crs(grd) <- crs(joined_spatial)
-plot(grd)
 yth.idw <- gstat::idw(youth ~ 1, joined_spatial, newdata=grd, idp=3.0) #idp of 3 chosen as we want closer values to mean more
 
 r_hdb_idw       <- raster(yth.idw)
@@ -275,7 +273,7 @@ st_crs(hdb_idw) <- st_crs("EPSG:4326") #set crs for new polygons
 tm_shape(base_map) + tm_borders() + 
   tm_basemap('OpenStreetMap') + 
   tm_shape(hdb_idw) + tm_polygons(col = 'youth', palette = 'Blues') + 
-  tm_shape(hdb_spatial) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_shape(hdb_spatial) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  + #plot with all hdb points
   tm_compass(type="8star", size = 2) +
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
@@ -292,7 +290,7 @@ hdb_yth_pts <- st_intersection(hdb_spatial, hdb_idw)
 tm_shape(base_map) + tm_borders() + 
   tm_basemap('OpenStreetMap') + 
   tm_shape(hdb_idw) + tm_polygons(col = 'youth', palette = 'Blues') + 
-  tm_shape(hdb_yth_pts) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  +
+  tm_shape(hdb_yth_pts) + tm_bubbles(size = 0.1, scale = 0.5, col = 'black')  + #plot with only hdbs points inside the filter
   tm_compass(type="8star", size = 2) +
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
@@ -308,17 +306,6 @@ tm_shape(base_map) + tm_borders() +
 # joined <- joined %>% mutate(youth = ifelse(is.na(youth), yth_mean, youth)) #replace NAs with mean
 # joined <- joined %>% group_by(addr) %>% summarise(addr = addr, youth = mean(youth), geometry = geometry) #for rows with multiple densities, replace with mean of duplicates.
 # joined <- unique(joined)
-
-
-#Plot with handled dataset
-ggplot() +
-  geom_sf(data = yth_poly, aes(fill = youth), color = "black") +
-  geom_point(data = joined, aes(x = st_coordinates(joined)[,1], y = st_coordinates(joined)[,2], color = youth), size = 1) +
-  scale_color_gradient(name = 'HDB locations and density', low = "yellow", high = "red") + 
-  scale_fill_gradient(name = 'Density polys', low = "blue", high = "green") +
-  labs(title = "Overlay of Polygon and Point Plot") +  theme_void()
-
-
 
   
 #Plot overlay of polygon and point plot for bus stops with HDB points
@@ -390,7 +377,7 @@ hdb_centers_poly <- st_cast(hdb_centers_poly,'POLYGON') #to split multipolygon t
 tm_shape(base_map) + tm_borders() + 
   tm_basemap('OpenStreetMap') + 
   tm_shape(hdb_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
-  tm_shape(joined) + tm_bubbles(size = 0.05, scale = 0.5, col = 'youth')  +
+  tm_shape(hdb_yth_pts) + tm_bubbles(size = 0.005, scale = 0.5)  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
@@ -464,7 +451,7 @@ tm_shape(base_map) + tm_borders() +
   tm_shape(hdb_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) +
   tm_scale_bar(width = 0.15) +
-  tm_layout(legnd.format = list(digits = 0),
+  tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
             legend.text.size = 0.5, 
             legend.title.size = 1,
@@ -499,32 +486,43 @@ percentage_captured <- num_hdb_captured / nrow(hdb_yth_pts)
 print(percentage_captured)
 #1.5km radius: 98.7% HDB captured for filtered HDBs
 
-closest_busstops
-
-class(base_map)
-
+#Now we want to add the region attribute to each datapoint for each busstop for later
+#First extract out the polygons with the regions only
 combined_base_map <- base_map %>%
   group_by(REGION_N) %>%
-  summarise(geometry = st_combine(geometry))
+  summarise(geometry = st_combine(geometry)) 
+combined_base_map <- st_transform(combined_base_map, crs = 4326)
+combined_base_map <- st_make_valid(combined_base_map)
 
-#st_intersection(closest_busstops,combined_base_map)
+final_closest_busstops <- st_intersection(closest_busstops,combined_base_map) #get the regions for each busstop 
+final_closest_busstops <- distinct(final_closest_busstops) #remove duplicated rows
+final_closest_busstops <- final_closest_busstops %>% rename(Region = REGION_N)
 
+#Export as a geojson such for bus line analysis
+st_write(final_closest_busstops, "bus_stops.geojson", driver = 'geoJSON',append = T) # DO NOT RUN AGAIN, IT WILL KEEP ADDING LAYERS 
 
 #Onto finding ideal busstops for nightlife
 
-nightlife_points <- as(nightlife_sf_data, "Spatial")
-nightlife_centers <- kde.points(nightlife_points, h = 0.009) #1km smoothing
+nightlife_points <- as(nightlife, "Spatial")
+nightlife_centers <- kde.points(nightlife_points, h = 750) #1km smoothing
 nightlife_centers_sf <- st_as_sf(nightlife_centers)
+nightlife_centers$kde <- nightlife_centers$kde * 1000000000 
 
 tm_shape(nightlife_centers) + tm_raster()
 
-reclass_values_2 <- c(0,1000,1, #reclassify kde values from 0-1000 in group 1 and so on
-                    1000,2000,2,
-                    2000,3000,3,
-                    3000,4000,4)
+max(nightlife_centers$kde)
+
+reclass_values_2 <- c(0,max(nightlife_centers$kde) / 7,1, #reclassify kde values from 0-1000 in group 1 and so on
+                      max(nightlife_centers$kde) / 7,2 * max(nightlife_centers$kde) / 7,2,
+                      2* max(nightlife_centers$kde) / 7,3 * max(nightlife_centers$kde) / 7,3,
+                      3* max(nightlife_centers$kde) / 7,4 * max(nightlife_centers$kde) / 7,4,
+                      4* max(nightlife_centers$kde) / 7,5 * max(nightlife_centers$kde) / 7,5,
+                      5* max(nightlife_centers$kde) / 7,6 * max(nightlife_centers$kde) / 7,6,
+                      6* max(nightlife_centers$kde) / 7,max(nightlife_centers$kde),7)
+?rasterToPolygons
 
 reclass_nightlife_centers <- reclassify(as(nightlife_centers, "RasterLayer"), reclass_values_2) #reclassify kde values to groups
-nightlife_centers_poly <- rasterToPolygons(reclass_nightlife_centers, dissolve = T) #to make a polygon layer
+nightlife_centers_poly <- rasterToPolygons(reclass_nightlife_centers, dissolve = T, digits = 6) #to make a polygon layer
 nightlife_centers_poly <- st_as_sf(nightlife_centers_poly) #to make an SF object
 nightlife_centers_poly <- nightlife_centers_poly[-c(1,2),] #remove polys with low kde values 
 nightlife_centers_poly <- st_cast(nightlife_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
@@ -536,7 +534,7 @@ central_area <- base_map %>% filter(PLN_AREA_N %in% c('DOWNTOWN CORE', 'BUKIT ME
 tm_shape(central_area) + tm_borders() + 
   tm_basemap('OpenStreetMap') + 
   tm_shape(nightlife_centers_poly) + tm_fill(col = 'kde') + tm_borders() +
-  tm_shape(nightlife_sf_data) + tm_bubbles(size = 0.01, col = "black")  +
+  tm_shape(nightlife) + tm_bubbles(size = 0.01, col = "black")  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
@@ -548,6 +546,7 @@ tm_shape(central_area) + tm_borders() +
 #get the centroids of each polygon
 nightlife_centers_points <- st_centroid(nightlife_centers_poly)
 #find closest busstop to each centroid
+nightlife_centers_points <- st_transform(nightlife_centers_points, crs = 4326)
 closest_nightlife_busstops_index <- st_nearest_feature(nightlife_centers_points, bus_spatial)
 closest_nightlife_busstops <- bus_spatial[closest_nightlife_busstops_index,]
 
@@ -584,7 +583,7 @@ closest_nightlife_busstops_buffer <- st_make_valid(closest_nightlife_busstops_bu
 tm_shape(central_area) + tm_borders() + 
   tm_basemap('OpenStreetMap') + 
   tm_shape(closest_nightlife_busstops_buffer) + tm_fill(col = 'yellow') + tm_borders() +
-  tm_shape(nightlife_sf_data) + tm_bubbles(size = 0.025, col = "black")  +
+  tm_shape(nightlife) + tm_bubbles(size = 0.025, col = "black")  +
   tm_compass(type="8star", size = 2) + 
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "bottom"),
@@ -593,14 +592,23 @@ tm_shape(central_area) + tm_borders() +
             title="Busstop buffer for nightlife locations in Singapore",
             title.position = c('left', 'top'))
 
-num_nightlife_captured <- nrow(st_intersection(nightlife_sf_data, closest_nightlife_busstops_buffer))
-percentage_captured <- num_hdb_captured / nrow(nightlife_sf_data)
+nightlife <- st_transform(nightlife, crs = 4326)
+num_nightlife_captured <- nrow(st_intersection(nightlife, closest_nightlife_busstops_buffer))
+percentage_captured <- num_nightlife_captured / nrow(nightlife)
 print(percentage_captured)
-#500m radius: 66.7% nightlife captured
+#500m radius: 71.0% nightlife captured
 
-df_hex_nightlife = st_as_sf(closest_nightlife_busstops)                                                                                                                 
-st_write(df_hex_nightlife, "bus_stops_within_buffers_nightlife.geojson")
+combined_base_map_nightlife <- central_area %>%
+  group_by(REGION_N) %>%
+  summarise(geometry = st_combine(geometry)) 
+combined_base_map_nightlife <- st_transform(combined_base_map_nightlife, crs = 4326)
+combined_base_map_nightlife <- st_make_valid(combined_base_map_nightlife)
 
-df_hex = st_as_sf(closest_busstops)                                                                                                                 
-st_write(df_hex, "bus_stops_within_buffers.geojson")
+final_closest_busstops_nightlife <- st_intersection(closest_nightlife_busstops,combined_base_map_nightlife) #get the regions for each busstop 
+final_closest_busstops_nightlife <- distinct(final_closest_busstops_nightlife) #remove duplicated rows
+final_closest_busstops_nightlife <- final_closest_busstops_nightlife %>% rename(Region = REGION_N)
+
+st_write(final_closest_busstops_nightlife, "bus_stops_nightlife.geojson")
+
+
 
