@@ -7,7 +7,7 @@ output: html_document
 ```{r setup}
 library(GISTools)
 library(tmap)
-library(maptools) 
+library(maptools)
 library(sp)
 library(sf)
 library(dplyr)
@@ -17,19 +17,21 @@ library(osmdata)
 # 2. Helper functions
 ```{r helper functions}
 # Create plot of basemap with specified regions, nightlife locations in sg and tmap mode
-nightlife_basemap_plot <- function(base_plg, nightlife_sf,mode) {
+nightlife_basemap_plot <- function(base_plg, nightlife_sf, mode) {
   tmap_mode(mode)
   tmap_options(check.and.fix = TRUE)
-  
-  tm_shape(base_plg) + tm_borders(col='black') + 
-    tm_shape(nightlife_sf) + tm_dots(size = 0.0075, col = "red") + # Nightlife locations
+
+  tm_shape(base_plg) + tm_borders(col = "black") +
+    tm_shape(nightlife_sf) + tm_dots(size = 0.005, col = "red") + # Nightlife locations
     tm_scale_bar(width = 0.15) +
-    tm_layout(legend.format = list(digits = 0),
-              legend.position = c("left", "bottom"),
-              legend.text.size = 0.25, 
-              legend.title.size = 0.5,
-              title="Nightlife location in Singapore",
-              title.position = c('left', 'bottom'))
+    tm_layout(
+      legend.format = list(digits = 0),
+      legend.position = c("left", "bottom"),
+      legend.text.size = 0.25,
+      legend.title.size = 0.5,
+      title = "Nightlife location in Singapore",
+      title.position = c("left", "bottom")
+    )
 }
 ```
 
@@ -39,28 +41,30 @@ nightlife_basemap_plot <- function(base_plg, nightlife_sf,mode) {
 subzones <- st_read(dsn = "dataset/basemap", layer = "MP14_SUBZONE_NO_SEA_PL")
 base_map <- st_read(dsn = "dataset/basemap", layer = "SGP_adm0")
 base_map <- base_map %>% select(ISO)
-base_map <- st_transform(base_map, crs=st_crs(subzones))
+base_map <- st_transform(base_map, crs = st_crs(subzones))
 
 
 # 2.2 Nightlife (Bars + Clubs) Data (Points Vectors)
-query <- opq(bbox = "singapore, singapore") %>% 
-  add_osm_feature(key = "amenity", value = c("bar","biergarten", "pub", "nightclub"))
+query <- opq(bbox = "singapore, singapore") %>%
+  add_osm_feature(key = "amenity", value = c("bar", "biergarten", "pub", "nightclub"))
 rawdata_nightlife <- osmdata_sf(query)
-nightlife_points <- rawdata_nightlife$osm_points %>% drop_na(name) %>%
-  dplyr::select(name, amenity, `addr:postcode`, `addr:street`) 
+nightlife_points <- rawdata_nightlife$osm_points %>%
+  drop_na(name) %>%
+  dplyr::select(name, amenity, `addr:postcode`, `addr:street`)
 
 # some nightlife locations are represented as polygons, we convert them to point features
-nightlife_plg <- rawdata_nightlife$osm_polygons %>% drop_na(name) %>%
+nightlife_plg <- rawdata_nightlife$osm_polygons %>%
+  drop_na(name) %>%
   dplyr::select(name, amenity, `addr:postcode`, `addr:street`) %>%
   st_centroid()
 nightlife <- rbind(nightlife_points, nightlife_plg)
 
 # Create a Nightlife Spatial Points DataFrame
-nightlife_sf <- st_transform(nightlife, crs=st_crs(subzones)) # project to basemap's CRS
+nightlife_sf <- st_transform(nightlife, crs = st_crs(subzones)) # project to basemap's CRS
 nightlife_sf <- st_intersection(nightlife_sf, base_map) # remove nightlife points that lie outside of basemap
 
 
-# 2.3 Restaurants 
+# 2.3 Restaurants
 restaurants <- read.csv("dataset/midnight_restaurants.csv")
 restaurant_coordinates <- cbind(restaurants$lon, restaurants$lat)
 
@@ -79,6 +83,7 @@ nightlife_basemap_plot(base_map, restaurants_sf, "view")
 We are choosing to narrow our scope to nightlife locations in the central regions of Singapore. After close inspection of the basemap polygons, we define these central regions as Downtown Core, Singapore River, Rochor, Outram and Lavender.
 ```{r , echo=TRUE}
 # Filter polygons of interest
+View(subzones)
 central_plg <- subzones %>% filter(PLN_AREA_C %in% c("DT", "SR", "RC", "OT") | SUBZONE_N %in% c("LAVENDER"))
 
 # Plot with filtered polygons
@@ -96,7 +101,9 @@ nightlife_basemap_plot(base_map, restaurant_filtered_sf, "view")
 
 # 6. Save filtered nightlife and restaurants
 ```{r}
-st_write(nightlife_filtered_sf, "dataset/processed_datasets/nightlife_locations.geojson", append=FALSE)
-st_write(restaurant_filtered_sf, "dataset/processed_datasets/restaurants.geojson", append=FALSE)
+# Take not to delete files before overwriting
+st_write(nightlife_filtered_sf, "dataset/processed_datasets/nightlife_locations.geojson")
+st_write(restaurant_filtered_sf, "dataset/processed_datasets/restaurants.geojson")
 ```
+
 
