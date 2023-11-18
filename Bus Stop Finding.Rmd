@@ -363,7 +363,7 @@ st_crs(hdb_idw) <- st_crs("EPSG:4326") #set crs for new polygons
 hdb_idw <- st_intersection(hdb_idw, base_map) #to ensure new polygons stay within SG boundary
 
 #assigning each hdb a youth value by intersecting the multipolygons to with all hdbs
-hdb_yth_pts <- st_intersection(hdb_spatial, hdb_idw)
+hdb_yth_pts <- st_intersection(hdb_spatial, hdb_idw)  #takes some time
 
 idw_final <- tm_shape(base_map) + tm_borders() + 
   tm_shape(hdb_idw) + tm_polygons(col = 'youth', title = 'Youth Density', palette = 'Blues') + 
@@ -426,11 +426,11 @@ reclass_values <- c(0,100,1, #reclassify kde values from 0-50 in group 1 and so 
                     100,200,2,
                     200,300,3,
                     300,400,4,
-                    400,500,5,
-                    500,600,6)
+                    400,500,5)
+
 
 reclass_hdb_centers <- reclassify(as(hdb_centers, "RasterLayer"), reclass_values) #reclassify kde values to groups
-hdb_centers_poly <- rasterToPolygons(reclass_hdb_centers, dissolve = T) #to make a polygon layer
+hdb_centers_poly <- rasterToPolygons(reclass_hdb_centers, dissolve = T, n = 16, digits = 3) #to make a polygon layer
 hdb_centers_poly <- st_as_sf(hdb_centers_poly) #to make an SF object
 hdb_centers_poly <- hdb_centers_poly[-c(1,2),] #remove polys with low kde values 
 hdb_centers_poly <- st_cast(hdb_centers_poly,'POLYGON') #to split multipolygon to polygon to obtain centers
@@ -439,7 +439,7 @@ hdb_centers_poly$kde <- factor(hdb_centers_poly$kde) #to tell R to recognise the
 
 kde_second <- tm_shape(base_map) + tm_borders() + 
   tm_shape(hdb_centers_poly) + tm_polygons(col = 'kde', title = 'KDE Group', palette = 'YlOrRd') + 
-    tm_shape(hdb_yth_pts) + tm_dots(size = 0.1, scale = 0.5, col = 'black')  +
+    tm_shape(hdb_yth_pts) + tm_dots(size = 0.01, scale = 0.5, col = 'black')  +
   tm_compass(type="8star", size = 2) +
   tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
@@ -484,3 +484,109 @@ tmap_save(kde_centroid, filename = "plots/optimal_stops/kde_centroid.png")
 
 ```
 
+
+## Bus Stop Mapping
+
+The next set is to find out how the Bus Stops fare with our HDBs. First lets take a look at how the bus stops are distributed around Singapore.
+
+```{r all bus}
+
+
+bus_all <- tm_shape(base_map) + tm_borders() + 
+  tm_shape(bus_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Bus Stops in Singapore",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+bus_all
+
+tmap_save(bus_all, filename = "plots/optimal_stops/bus_all.png")
+
+```
+
+
+We overlay these with our KDEs earlier.
+
+```{r all bus kde}
+
+#Map to show how bustops fare with kdes
+bus_all_kde <- tm_shape(base_map) + tm_borders() + 
+  tm_shape(hdb_centers_poly) + tm_polygons(col = 'kde', title = 'KDE Group', palette = 'YlOrRd') +
+  tm_shape(bus_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Bus Stops with KDEs",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+bus_all_kde
+
+tmap_save(bus_all_kde, filename = "plots/optimal_stops/bus_all_kde.png")
+
+```
+
+
+Next filter out only bus stops within these kdes. This step is not really necessary, but is doen to reduce computational intensity when calculating the best bus stop for each.
+
+```{r filtered bus kde}
+
+#remove busstops which are not inside the polygons
+bus_inside_spatial <- st_intersection(bus_spatial, hdb_centers_poly)
+
+#Show busstops which are inside the KDEs
+bus_filtered_kde <- tm_shape(base_map) + tm_borders() + 
+  tm_shape(hdb_centers_poly) + tm_polygons(col = 'kde', title = 'KDE Group', palette = 'YlOrRd') +
+  tm_shape(bus_inside_spatial) + tm_bubbles(size = 0.15, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Filtered Bus Stops with KDEs",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+bus_filtered_kde
+
+tmap_save(bus_filtered_kde, filename = "plots/optimal_stops/bus_filtered_kde.png")
+
+```
+
+
+Lastly, we find the closest bus stop to each centroid found earlier and assign each polygon a bus stop!
+
+```{r filtered bus}
+
+
+#find closest busstop to each centroid
+closest_busstops_index <- st_nearest_feature(hdb_centers_points, bus_inside_spatial)
+closest_busstops <- bus_inside_spatial[closest_busstops_index,]
+
+#busstops 
+
+bus_final <- tm_shape(base_map) + tm_borders() + 
+  tm_shape(hdb_centers_poly) + tm_polygons(col = 'kde', title = 'KDE Group', palette = 'YlOrRd') +
+  tm_shape(closest_busstops) + tm_bubbles(size = 0.25, scale = 0.5, col = 'black')  +
+  tm_compass(type="8star", size = 2) + 
+  tm_layout(legend.format = list(digits = 0),
+            legend.position = c("left", "top"),
+            legend.text.size = 0.5, 
+            legend.title.size = 1,
+            title="Final Bus Stops",
+            title.size = 1,
+            title.position = c('left', 'top'))
+
+bus_final
+
+tmap_save(bus_final, filename = "plots/optimal_stops/bus_final.png")
+
+
+```
