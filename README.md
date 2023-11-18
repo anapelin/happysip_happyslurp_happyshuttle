@@ -18,7 +18,7 @@ The primary goal of the project is to identify and delineate the landscape of ni
 
 By addressing these objectives, our project hopes to offer insights for the improvement of the night-time scene in Singapore, suggesting potential areas for the addition of food places or bus stop routes post-midnight.
 
-## [Project Structure]
+## 3. Project Structure
 Code files in the main directory are labelled No.1 to 5 with each representing the following: 
 1. Data Preprocessing in R & Python
 2. Exploratory Spatial Data Analysis in R
@@ -27,13 +27,13 @@ Code files in the main directory are labelled No.1 to 5 with each representing t
 *Note: An updated version of the HTML file requires you to knit the no.4 Rmd file*
 5. Finding Optimal Bus Stops with Road Networks to map the optimal path
 
-## Folders
+## 4. Folders
 1. Dataset - All of our data source for this project from Singapore Base Map, Restaurants Locations, etc
 2. Plots - Contains all the image plots for our project analysis into nightlife
 3. optimal_stops - Contains all the analysis in filtering the number of bus stops to serve strategic locations in Singapore's HDB areas
 4. optimal_bus_stops - Contains the 2 recommended route of our public transportation analysis bringing individuals from downtown to high youth density HDB residential areas post midnight
 
-# Example Plots of our Analysis
+# 5. Some plots of our analysis
 ![linear trends.gif](plots%2Fcrowd_density%2Flinear%20trends.gif)
 
 ![hdb_yth_plot.png](plots%2Foptimal_stops%2Fhdb_yth_plot.png)
