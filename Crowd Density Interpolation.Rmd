@@ -89,17 +89,18 @@ bcr_spatial <- st_as_sf(bcr, coords = c("lon", "lat"))
 #quick look at distribution of bars, clubs and restaurants
 tmap_mode('plot')
 tmap_options(check.and.fix = TRUE)
-tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
-  tm_shape(bcr_spatial) + tm_dots(size = 0.5, col = 'cat', palette = c('blue','green2'), title = 'Category') + # Nightlife and Restaurants locations
-  tm_scale_bar(width = 0.15) 
+avail_places <- tm_shape(base_map) + tm_borders(col='black') + tm_fill(col = "white") +
+  tm_shape(bcr_spatial) + tm_dots(size = 0.3, col = 'cd_10', title = 'Crowd Density') + # Nightlife and Restaurants locations
+  tm_scale_bar(width = 0.15) +
   tm_layout(legend.format = list(digits = 0),
-            legend.position = c("left", "bottom"),
-            legend.text.size = 0.25, 
-            legend.title.size = 0.5,
-            title="Nightlife and Late Restaurants \n in Singapore",
-            title.position = c('left', 'bottom'))
-  
+            legend.position = c("left", "top"),
+            legend.text.size = 0.75, 
+            legend.title.size = 1,
+            title="Crowd Density at 10pm",
+            title.position = c('left', 'top'))
+avail_places  
 
+tmap_save(avail_places, filename = "plots/crowd_density/avail places.png")
 
 ```
 
@@ -148,9 +149,9 @@ r.m <- mask(r, base_spatial)
 #plot the trend!
 l_1 <- tm_shape(r.m) + 
   tm_raster(n=13, stretch.palette=FALSE, 
-            title="Linear Trend of Crowd \n Density at 10pm", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+            title="Linear Trend of Crowd \nDensity at 10pm", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
       tm_shape(base_map) + tm_borders(col='black') + tm_fill(alpha = 0) +
-  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2'), title = 'Category') +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat',palette = c('green2','blue'), title = 'Label', label = c('Late night restaurants','Nightlife locations')) +
   tm_legend(legend.outside=TRUE)
 
 #repeat for the rest of the hours
@@ -166,9 +167,9 @@ r.m <- mask(r, base_spatial)
 
 l_2 <- tm_shape(r.m) + 
   tm_raster(n=13, stretch.palette=FALSE, 
-            title="Linear Trend of Crowd \n Density at 11pm", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+            title="Linear Trend of Crowd \nDensity at 11pm", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
         tm_shape(base_map) + tm_borders(col='black') + tm_fill(alpha = 0) +
-  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2'), title = 'Category') +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('green2','blue'), title = 'Label', label = c('Late night restaurants','Nightlife locations')) +
   tm_legend(legend.outside=TRUE)
 
 #12am
@@ -183,9 +184,9 @@ r.m <- mask(r, base_spatial)
 
 l_3 <- tm_shape(r.m) + 
   tm_raster(n=13, stretch.palette=FALSE, 
-            title="Linear Trend of Crowd \n Density at 12am", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+            title="Linear Trend of Crowd \nDensity at 12am", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
         tm_shape(base_map) + tm_borders(col='black') + tm_fill(alpha = 0) +
-  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2'), title = 'Category') +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('green2','blue'), title = 'Label', label = c('Late night restaurants','Nightlife locations')) +
   tm_legend(legend.outside=TRUE)
 
 #1am
@@ -200,9 +201,9 @@ r.m <- mask(r, base_spatial)
 
 l_4 <- tm_shape(r.m) + 
   tm_raster(n=13, stretch.palette=FALSE, 
-            title="Linear Trend of Crowd \n Density at 1am", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+            title="Linear Trend of Crowd \nDensity at 1am", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
         tm_shape(base_map) + tm_borders(col='black') + tm_fill(alpha = 0) +
-  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2'), title = 'Category') +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('green2','blue'), title = 'Label', label = c('Late night restaurants','Nightlife locations')) +
   tm_legend(legend.outside=TRUE)
 
 #2am
@@ -217,9 +218,9 @@ r.m <- mask(r, base_spatial)
 
 l_5 <- tm_shape(r.m) + 
   tm_raster(n=13, stretch.palette=FALSE, 
-            title="Linear Trend of Crowd \n Density at 2am", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
+            title="Linear Trend of Crowd \nDensity at 2am", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
         tm_shape(base_map) + tm_borders(col='black') + tm_fill(alpha = 0) +
-  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2'), title = 'Category') +
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('green2','blue'), title = 'Label', label = c('Late night restaurants','Nightlife locations')) +
   tm_legend(legend.outside=TRUE)
 
 l_1
@@ -286,7 +287,7 @@ tm_shape(r.m) +
   tm_raster(n=13, stretch.palette=FALSE, 
             title="Crowd Density at 10pm", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
   tm_shape(base_map) + tm_borders(col='black') + tm_fill(alpha = 0) +
-  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2'), title = 'Category')+
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('green2','blue'), title = 'Label', label = c('Late night restaurants','Nightlife locations'))+
   tm_legend(legend.outside=TRUE) 
 i_10
 
@@ -316,7 +317,7 @@ i_11 <- tm_shape(r.m) +
   tm_raster(n=13, stretch.palette=FALSE, 
             title="Crowd Density at 11pm", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
     tm_shape(base_map) + tm_borders(col='black') + tm_fill(alpha = 0) +
-  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2'), title = 'Category')+
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('green2','blue'), title = 'Label', label = c('Late night restaurants','Nightlife locations'))+
   tm_legend(legend.outside=TRUE) 
 i_11
 
@@ -346,7 +347,7 @@ i_12 <- tm_shape(r.m) +
   tm_raster(n=13, stretch.palette=FALSE, 
             title="Crowd Density at 12am", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
     tm_shape(base_map) + tm_borders(col='black') + tm_fill(alpha = 0) +
-  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2'), title = 'Category')+
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('green2','blue'), title = 'Label', label = c('Late night restaurants','Nightlife locations'))+
   tm_legend(legend.outside=TRUE) 
 i_12
 
@@ -376,7 +377,7 @@ i_1 <- tm_shape(r.m) +
   tm_raster(n=13, stretch.palette=FALSE, 
             title="Crowd Density at 1am", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
     tm_shape(base_map) + tm_borders(col='black') + tm_fill(alpha = 0) +
-  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2'), title = 'Category')+
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('green2','blue'), title = 'Label', label = c('Late night restaurants','Nightlife locations'))+
   tm_legend(legend.outside=TRUE) 
 i_1
 
@@ -406,7 +407,7 @@ i_2 <- tm_shape(r.m) +
   tm_raster(n=13, stretch.palette=FALSE, 
             title="Crowd Density at 2am", palette = 'Reds', style = 'fixed',breaks = c(0,10,20,30,40,50,60,70,80,90,100,110,120)) +
     tm_shape(base_map) + tm_borders(col='black') + tm_fill(alpha = 0) +
-  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('blue','green2'), title = 'Category')+
+  tm_shape(bcr) + tm_dots(size=0.1, col = 'cat', palette = c('green2','blue'), title = 'Label', label = c('Late night restaurants','Nightlife locations'))+
   tm_legend(legend.outside=TRUE) 
 i_2
 

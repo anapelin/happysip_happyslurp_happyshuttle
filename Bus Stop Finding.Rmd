@@ -713,7 +713,7 @@ r_nightlife_centers.m     <- mask(r_nightlife_centers, base_spatial)
 kde_n_first <- tm_shape(r_nightlife_centers.m) + 
   tm_raster(n=10, stretch.palette = FALSE,title="KDE Values") +
   tm_shape(base_map) + tm_borders() + tm_fill(alpha = 0) +
-  tm_shape(nightlife) + tm_dots(size=0.2) +
+  tm_shape(nightlife) + tm_dots(size=0.005) +
   tm_legend(legend.outside=TRUE) +
   tm_layout(legend.format = list(digits = 0),
             legend.position = c("left", "top"),
@@ -753,7 +753,7 @@ kde_n_second <- tm_shape(central_area) + tm_borders() +
             legend.position = c("left", "top"),
             legend.text.size = 0.5, 
             legend.title.size = 1,
-            title="Filtered KDEs \nwith Nightlife",
+            title="Filtered KDEs with nightlifes",
             title.position = c('left', 'top'))
 
 kde_n_second
